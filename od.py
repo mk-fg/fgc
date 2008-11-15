@@ -57,7 +57,8 @@ def do(obj, maxlen=77, lindent=24, maxspew=600):
     classes   = []
     attrs     = []
     for slot in dir(obj):
-        attr = getattr(obj, slot)
+        try: attr = getattr(obj, slot)
+        except AttributeError: continue
         if   slot == '__class__':
             objclass = attr.__name__
         elif slot == '__doc__':
