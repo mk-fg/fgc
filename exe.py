@@ -1,4 +1,5 @@
 from subprocess import Popen, PIPE
+import sys
 
 
 queue = []
@@ -7,8 +8,12 @@ queue = []
 def _(*argz, **kwz):
 	'''Execute process in background'''
 
-	try: block = kwz.pop('block')
-	except KeyError: block = False
+	try:
+		block = kwz.pop('sys')
+		kwz.update(dict(stdin=sys.stdin,stdout=sys.stdout,stderr=sys.stderr))
+	except KeyError:
+		try: block = kwz.pop('block')
+		except KeyError: block = False
 
 	if not argz[0][0].startswith('/'):
 		try:

@@ -276,3 +276,12 @@ def mkdir(path, mode=0755, uid=None, gid=None, recursive=False):
 			if not uid: uid = -1
 			if not gid: gid = -1
 			os.chown(ppath, uid, gid)
+
+
+def ln(src, dst, hard=False, recursive=False):
+	'''Create a link'''
+	if recursive:
+		lnk_dir = os.path.dirname(dst)
+		if not os.path.exists(lnk_dir): mkdir(lnk_dir, recursive=recursive)
+	if not hard: os.symlink(src, dst)
+	else: os.link(src, dst)

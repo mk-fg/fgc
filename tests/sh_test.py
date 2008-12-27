@@ -1,7 +1,6 @@
 import unittest, os, dta, string, re, sys
 import sh
 
-
 class SH(unittest.TestCase):
 	'''
 	File/dir ops test
@@ -332,12 +331,28 @@ class SH(unittest.TestCase):
 
 
 	def test_mkdir(self):
-		dst = self._(dta.uid(8))
+		dst1 = self._()
+		dst2 = self._(dst1)
 		mode = 0751
 		os.chmod(self.d1, mode)
-		sh.mkdir(dst, mode, recursive=True)
-		self.assertTrue(os.path.isdir(dst)) # Dir was created
-		self.assertEqual(os.stat(self.d1).st_mode, os.stat(dst).st_mode) # Mode is correct
+		sh.mkdir(dst2, mode, recursive=True)
+		self.assertTrue(os.path.isdir(dst2)) # Dir was created
+		self.assertEqual(os.stat(self.d1).st_mode, os.stat(dst1).st_mode)
+		self.assertEqual(os.stat(self.d1).st_mode, os.stat(dst2).st_mode) # Modes are correct
+
+
+	def test_ln(self):
+		dst1 = self._()
+		dst2 = self._(dst1)
+		sh.ln(self.d1, dst2, recursive=True)
+		self.assertTrue(os.path.isdir(dst1)) # Intermediate dir was created
+		self.assertTrue(os.path.islink(dst2)) # Symlink was created
+		self.assertEqual(self.d1, os.path.realpath(dst2)) # Symlink points to correct path
+
+		dst = self._()
+		sh.ln(self.f1, dst, hard=True, recursive=True)
+		self.assertTrue(os.path.isfile(dst)) # Hardlink was created
+		self.assertTrue(os.path.samefile(self.f1, dst)) # Hardlink points to the same file
 
 
 if __name__ == "__main__":
