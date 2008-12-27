@@ -2,7 +2,7 @@ def printDict(di, format="%-25s %s"):
     for (key, val) in di.items():
         print format % (str(key)+':', val)
 
-def do(obj, maxlen=77, lindent=24, maxspew=600):
+def do(obj, maxlen=95, lindent=24, maxspew=1200):
     """Print a nicely formatted overview of an object.
 
     The output lines will be wrapped at maxlen, with lindent of space
