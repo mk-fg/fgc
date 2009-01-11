@@ -61,6 +61,29 @@ def uname(uid):
 def gname(gid):
 	try: return grp.getgrgid(gid).gr_name
 	except KeyError: return gid
+def mode(mode):
+	if mode.isdigit():
+		if len(mode) < 4: mode = '0'+mode
+		while len(mode) < 4: mode += '0'
+		return int(mode, 8)
+	elif len(mode) == 9:
+		val = 0
+		bits = (
+			0400, # r-- --- ---
+			0200, # -w- --- ---
+			0100, # --x --- ---
+			0040, # --- r-- ---
+			0020, # --- -w- ---
+			0010, # --- --x ---
+			0004, # --- --- r--
+			0002, # --- --- -w-
+			0001 # --- --- --x
+		)
+		for n in xrange(len(bits)):
+			if mode[n] != '-': val |= bits[n]
+		return val
+	else:
+		raise Error, 'Unrecognized file system mode format: %s'%mode
 
 
 def cat(fsrc, fdst, length=16*1024):
@@ -273,11 +296,13 @@ def mkdir(path, mode=0755, uid=None, gid=None, recursive=False):
 			ppath = os.path.dirname(ppath)
 	else: stack = [path]
 	for ppath in stack:
-		os.mkdir(ppath, mode)
-		if uid or gid:
-			if not uid: uid = -1
-			if not gid: gid = -1
-			os.chown(ppath, uid, gid)
+		try:
+			os.mkdir(ppath, mode)
+			if uid or gid:
+				if not uid: uid = -1
+				if not gid: gid = -1
+				os.chown(ppath, uid, gid)
+		except OSError, err: raise Error, err
 
 
 def ln(src, dst, hard=False, recursive=False):

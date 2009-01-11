@@ -339,6 +339,7 @@ class SH(unittest.TestCase):
 		self.assertTrue(os.path.isdir(dst2)) # Dir was created
 		self.assertEqual(os.stat(self.d1).st_mode, os.stat(dst1).st_mode)
 		self.assertEqual(os.stat(self.d1).st_mode, os.stat(dst2).st_mode) # Modes are correct
+		self.assertRaises(sh.Error, sh.mkdir, self.f1) # Error is raised, since path exists
 
 
 	def test_ln(self):
@@ -365,6 +366,15 @@ class SH(unittest.TestCase):
 		self.assertTrue(os.path.samefile(self.f2, os.path.join(dst, os.path.basename(self.f2)))) # File inside was linked
 		self.assertFalse(os.path.samefile(self.d2, os.path.join(dst, os.path.basename(self.d2)))) # Subdir wasn't linked
 		self.assertRaises(sh.Error, sh.ln_r, self.f3, dst) # Error is raised, since path exists
+
+
+	def test_mode(self):
+		self.assertEqual(sh.mode('rwxr--r--'), 0744)
+		self.assertEqual(sh.mode('rw-rw-r--'), 0664)
+		self.assertEqual(sh.mode('r--------'), 0400)
+		self.assertEqual(sh.mode('710'), 0710)
+		self.assertEqual(sh.mode('64'), 0640)
+		self.assertEqual(sh.mode('4'), 0400)
 
 
 if __name__ == "__main__":
