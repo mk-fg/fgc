@@ -10,7 +10,8 @@ by Mike Kazantsev, 01.11.2008
 from subprocess import Popen, PIPE
 from string import whitespace as spaces
 import logging as log
-import os, sys, re, sh
+from fgc import sh
+import os, sys, re
 
 # Swallow '--config-dir' parameter
 try:

@@ -10,8 +10,9 @@ by Mike Kazantsev, 24.10.2008
 from subprocess import Popen, PIPE
 from string import whitespace as spaces
 from glob import glob
+from fgc import pkg
 import logging as log
-import os, sys, re, pkg
+import os, sys, re
 
 
 class Cfg(file):
