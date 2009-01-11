@@ -162,7 +162,7 @@ def cp_r(src, dst, symlinks=False, attrz=False, skip=[], onerror=None, atom=cp_d
 	if not onerror:
 		errors = []
 		onerror = lambda *args: errors.append(args)
-	for entity in fs_crawl(src, dirs=True, topdown=True, onerror=onerror):
+	for entity in crawl(src, dirs=True, topdown=True, onerror=onerror):
 		for pat in skip:
 			if pat.match(entity): break
 		else:
@@ -205,7 +205,7 @@ def rr(path, onerror=None, preserve=[], keep_root=False):
 	'''
 	try: preserve = [re.compile(preserve)]
 	except TypeError: preserve = [re.compile(pat) for pat in preserve]
-	for entity in fs_crawl(path, dirs=True, topdown=False, onerror=onerror):
+	for entity in crawl(path, dirs=True, topdown=False, onerror=onerror):
 		for pat in preserve:
 			if pat.match(entity): break
 		else:
@@ -248,7 +248,7 @@ def crawl(top, filter=None, dirs=True, topdown=True, onerror=False):
 					if regex.search(path): break
 				else: # No matches
 					if onerror == True: log.info('Skipping path "%s" due to filter settings'%path)
-					elif onerror: onerror(fs_crawl, path, sys.exc_info())
+					elif onerror: onerror(crawl, path, sys.exc_info())
 					continue
 			yield os.path.join(root, name)
 

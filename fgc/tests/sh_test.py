@@ -1,5 +1,5 @@
 import unittest, os, dta, string, re, sys
-import sh
+from fgc import sh
 
 class SH(unittest.TestCase):
 	'''
@@ -301,15 +301,15 @@ class SH(unittest.TestCase):
 
 	def test_fsc(self):
 		self.assertEqual(
-			sorted([path for path in sh.fs_crawl(self.d1)]),
+			sorted([path for path in sh.crawl(self.d1)]),
 			sorted([path.split(self.d1+'/')[1] for path in [self.d2, self.d3, self.d4, self.f2, self.f4, self.f3, self.f5, self.l1]])
 		)
 		self.assertEqual(
-			sorted([path for path in sh.fs_crawl(self.d1, dirs=False)]),
+			sorted([path for path in sh.crawl(self.d1, dirs=False)]),
 			sorted([path.split(self.d1+'/')[1] for path in [self.f2, self.f4, self.f3, self.f5, self.l1]])
 		)
 		self.assertEqual(
-			sorted([path for path in sh.fs_crawl(
+			sorted([path for path in sh.crawl(
 				self.d1,
 				filter=[
 					'^'+re.escape(os.path.basename(self.d3)),
