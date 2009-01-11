@@ -291,16 +291,16 @@ def mkdir(path, mode=0755, uid=None, gid=None, recursive=False):
 	ppath = path
 	if recursive:
 		stack = []
-		while not os.path.isdir(ppath):
+		while ppath and not os.path.isdir(ppath):
 			stack.insert(0, ppath)
 			ppath = os.path.dirname(ppath)
 	else: stack = [path]
 	for ppath in stack:
 		try:
 			os.mkdir(ppath, mode)
-			if uid or gid:
-				if not uid: uid = -1
-				if not gid: gid = -1
+			if uid != None or gid != None:
+				if uid == None: uid = -1
+				if gid == None: gid = -1
 				os.chown(ppath, uid, gid)
 		except OSError, err: raise Error, err
 
