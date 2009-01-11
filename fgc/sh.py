@@ -30,8 +30,9 @@ __all__ = [
 	'Error',
 	'cat',
 	'mv',
-	'fs_crawl',
-	'os'
+	'crawl',
+	'ln',
+	'ln_r'
 ]
 
 
@@ -138,7 +139,7 @@ def cp_d(src, dst, symlinks=False, attrz=False):
 	# TODO: What about devices, sockets etc.?
 
 
-def cp_r(src, dst, symlinks=False, attrz=False, skip=[], onerror=None):
+def cp_r(src, dst, symlinks=False, attrz=False, skip=[], onerror=None, atom=cp_d):
 	'''
 	Recursively copy a directory tree, preserving mode/stats.
 
@@ -152,11 +153,12 @@ def cp_r(src, dst, symlinks=False, attrz=False, skip=[], onerror=None):
 	it is false, the contents of the files pointed to by symbolic
 	links are copied.
 
-	Also includes optional ownership preservation flag.
+	Atom argument should be a callable, to be called in the same
+	way as cp_d function to transfer each individual file.
 	'''
 	try: skip = [re.compile(skip)]
 	except TypeError: skip = [re.compile(pat) for pat in skip]
-	cp_d(src, dst, attrz=attrz)
+	atom(src, dst, attrz=attrz)
 	if not onerror:
 		errors = []
 		onerror = lambda *args: errors.append(args)
@@ -167,7 +169,7 @@ def cp_r(src, dst, symlinks=False, attrz=False, skip=[], onerror=None):
 			try:
 				src_node = os.path.join(src, entity)
 				dst_node = os.path.join(dst, entity)
-				cp_d(src_node, dst_node, symlinks=symlinks, attrz=attrz)
+				atom(src_node, dst_node, symlinks=symlinks, attrz=attrz)
 			except (IOError, OSError, Error), err: onerror(src_node, dst_node, str(err))
 	try:
 		if errors: raise Error, errors
@@ -231,7 +233,7 @@ def mv(src, dst):
 		rr(src)
 
 
-def fs_crawl(top, filter=None, dirs=True, topdown=True, onerror=False):
+def crawl(top, filter=None, dirs=True, topdown=True, onerror=False):
 	'''Filesystem nodes iterator.'''
 	nodes = []
 	try: filter = filter and [re.compile(filter)]
@@ -283,5 +285,15 @@ def ln(src, dst, hard=False, recursive=False):
 	if recursive:
 		lnk_dir = os.path.dirname(dst)
 		if not os.path.exists(lnk_dir): mkdir(lnk_dir, recursive=recursive)
-	if not hard: os.symlink(src, dst)
-	else: os.link(src, dst)
+	try:
+		if not hard: os.symlink(src, dst)
+		else: os.link(src, dst)
+	except OSError, err: raise Error, err
+
+
+def ln_r(src, dst, skip=[], onerror=None):
+	'''Make a hardlink-tree from an existing one.'''
+	return cp_r(
+		src, dst, skip=skip, onerror=onerror,
+		atom=lambda *argz,**kwz: ln(*argz[0:2],hard=True)
+	)

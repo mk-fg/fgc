@@ -354,6 +354,8 @@ class SH(unittest.TestCase):
 		self.assertTrue(os.path.isfile(dst)) # Hardlink was created
 		self.assertTrue(os.path.samefile(self.f1, dst)) # Hardlink points to the same file
 
+		self.assertRaises(sh.Error, sh.ln, self.f1, dst) # Error is raised, since link exists
+
 
 if __name__ == "__main__":
 	unittest.main()

@@ -25,7 +25,7 @@ def _(*argz, **kwz):
 	try: cb = kwz.pop('callback')
 	except KeyError: # No callback given
 		if not block: queue.append(proc(*argz, **kwz))
-		else: proc(*argz, **kwz).wait()
+		else: return proc(*argz, **kwz).wait()
 	else: # Valid callback
 		if not block: queue.append((proc(*argz, **kwz), cb))
 		else:
