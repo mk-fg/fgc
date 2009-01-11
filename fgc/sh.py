@@ -295,5 +295,5 @@ def ln_r(src, dst, skip=[], onerror=None):
 	'''Make a hardlink-tree from an existing one.'''
 	return cp_r(
 		src, dst, skip=skip, onerror=onerror,
-		atom=lambda *argz,**kwz: ln(*argz[0:2],hard=True)
+		atom=lambda *argz,**kwz: cp_d(*argz, **kwz) if os.path.isdir(argz[0]) else ln(*argz[0:2],hard=True)
 	)

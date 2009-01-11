@@ -357,6 +357,16 @@ class SH(unittest.TestCase):
 		self.assertRaises(sh.Error, sh.ln, self.f1, dst) # Error is raised, since link exists
 
 
+	def test_ln_r(self):
+		dst = self._()
+		sh.ln_r(self.d1, dst)
+		self.assertTrue(os.path.isdir(dst)) # Path was cloned
+		self.assertFalse(os.path.samefile(self.d1, dst)) # Path wasn't hardlinked (hardly possible, btw)
+		self.assertTrue(os.path.samefile(self.f2, os.path.join(dst, os.path.basename(self.f2)))) # File inside was linked
+		self.assertFalse(os.path.samefile(self.d2, os.path.join(dst, os.path.basename(self.d2)))) # Subdir wasn't linked
+		self.assertRaises(sh.Error, sh.ln_r, self.f3, dst) # Error is raised, since path exists
+
+
 if __name__ == "__main__":
 	unittest.main()
 
