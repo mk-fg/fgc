@@ -84,6 +84,11 @@ class SH(unittest.TestCase):
 		dst = os.path.join(dst, os.path.basename(self.f2))
 		self.assertTrue(sh._cmp(self.f2, dst))
 
+	def test_cp_cat(self): # Only append is tested here, since most tests were done in cat
+		f2_org = open(self.f2).read()
+		sh.cp_cat(self.f1, self.f2, append=True)
+		self.assertEqual(f2_org + open(self.f1).read(), open(self.f2).read())
+
 	def test_cp_files(self):
 		dst = self._()
 		open(dst, 'wb').write(dta.uid(16))

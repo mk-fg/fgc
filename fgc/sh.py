@@ -106,14 +106,14 @@ def _cmp(src, dst):
 			os.path.normcase(os.path.abspath(dst)))
 
 
-def cp_cat(src, dst, recode=None):
+def cp_cat(src, dst, recode=None, append=False):
 	'''Copy data from src to dst'''
 	if _cmp(src, dst): raise Error, "'%s' and '%s' are the same file" %(src,dst)
 	fsrc = None
 	fdst = None
 	try:
 		fsrc = open(src, 'rb')
-		fdst = open(dst, 'wb')
+		fdst = open(dst, 'wb' if not append else 'ab')
 		cat(fsrc, fdst, recode=recode)
 	except IOError, err: raise Error, str(err)
 	finally:
