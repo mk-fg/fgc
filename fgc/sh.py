@@ -86,12 +86,15 @@ def mode(mode):
 		raise Error, 'Unrecognized file system mode format: %s'%mode
 
 
-def cat(fsrc, fdst, length=16*1024):
+def cat(fsrc, fdst, length=16*1024, recode=None):
 	'''copy data from file-like object fsrc to file-like object fdst'''
 	while 1:
 		buf = fsrc.read(length)
 		if not buf: break
-		fdst.write(buf)
+		if recode:
+			from fgc.enc import recode as rec
+			rec(fsrc, fdst, recode)
+		else: fdst.write(buf)
 
 
 def _cmp(src, dst):
@@ -103,7 +106,7 @@ def _cmp(src, dst):
 			os.path.normcase(os.path.abspath(dst)))
 
 
-def cp_cat(src, dst):
+def cp_cat(src, dst, recode=None):
 	'''Copy data from src to dst'''
 	if _cmp(src, dst): raise Error, "'%s' and '%s' are the same file" %(src,dst)
 	fsrc = None
@@ -111,7 +114,7 @@ def cp_cat(src, dst):
 	try:
 		fsrc = open(src, 'rb')
 		fdst = open(dst, 'wb')
-		cat(fsrc, fdst)
+		cat(fsrc, fdst, recode=recode)
 	except IOError, err: raise Error, str(err)
 	finally:
 		if fdst: fdst.close()

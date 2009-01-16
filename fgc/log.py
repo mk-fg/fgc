@@ -4,6 +4,11 @@ ls = logging.getLogger('core')
 ls._errz = ls._msgz = 0
 ls._errl = logging.WARNING # Which msgz are considered worth reporting on errz() call
 
+
+class DevNull(logging.Handler):
+	emit = lambda self, record: None
+
+
 for val,name in logging._levelNames.iteritems():
 	if isinstance(val, int): exec '%s=%s'%(name,val)
 
@@ -36,7 +41,7 @@ add_filter = ls.addFilter
 
 def _add_handlers(log, kwz):
 	try: key = kwz.pop('stream')
-	except KeyError: pass
+	except KeyError: log.addHandler(DevNull())
 	else:
 		if not isinstance(key, (list,tuple)): key = (key,)
 		for stream in key:

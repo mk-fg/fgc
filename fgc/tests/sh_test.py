@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import unittest, os, dta, string, re, sys
 from fgc import sh
 
@@ -9,6 +11,8 @@ class SH(unittest.TestCase):
 	- onerror callbacks
 	- uid / gid operations
 	'''
+
+	test_str = 'Внимание: при переключении на apache2 убедитесь, что все файлы htaccess совместимы с apache2.'
 
 	pg = '/tmp/'+dta.uid(8, charz=string.hexdigits+' '*5)
 	c = dta.uid(3, charz=string.printable+string.whitespace*7)
@@ -61,6 +65,10 @@ class SH(unittest.TestCase):
 		dst = self._f()
 		sh.cat(open(self.f1), open(dst, 'wb'))
 		self.assertEqual(open(self.f1).read(), open(dst).read())
+
+		open(self.f1, 'wb').write(self.test_str)
+		sh.cat(open(self.f1), open(dst, 'wb'), recode='koi8-r')
+		self.assertEqual(open(self.f1).read(), open(dst).read().decode('koi8-r').encode('utf-8'))
 
 	def test_cmp(self):
 		dst = self._()
