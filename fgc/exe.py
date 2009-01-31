@@ -1,5 +1,5 @@
 from subprocess import Popen, PIPE
-import sys
+import os, sys
 
 
 queue = []
@@ -17,7 +17,6 @@ def _(*argz, **kwz):
 
 	if not argz[0][0].startswith('/'):
 		try:
-			import os
 			from config import cfg
 			argz[0][0] = os.path.join(cfg.paths.bin, argz[0][0])
 		except (ImportError, AttributeError): pass
@@ -36,6 +35,22 @@ def _(*argz, **kwz):
 def proc(*argz, **kwz):
 	#~ if kwz.has_key('stdin') and not kwz.has_key('bufsize'): kwz['bufsize'] = 1
 	return Popen(*argz, **kwz)
+def pipe(*argz, **kwz):
+	nkwz = dict(stdin=PIPE, stdout=PIPE, stderr=PIPE)
+	nkwz.update(kwz)
+	return proc(*argz, **nkwz)
+def pin(*argz, **kwz):
+	if not argz or not isinstance(argz[0], (tuple, list)):
+		from hosting.config import cfg
+		if argz: kwz['stdin'] = open(argz[0], 'rb') if isinstance(argz[0], str) else argz[0]
+		argz = ([os.path.join(cfg.paths.bin, 'gzip'), '-d'],)
+	return pipe(*argz, **kwz).stdout
+def pout(*argz, **kwz):
+	if not argz or not isinstance(argz[0], (tuple, list)):
+		from hosting.config import cfg
+		if argz: kwz['stdout'] = open(argz[0], 'wb') if isinstance(argz[0], str) else argz[0]
+		argz = ([os.path.join(cfg.paths.bin, 'gzip')],)
+	return pipe(*argz, **kwz).stdin
 
 
 def wait(n=-1):
@@ -75,3 +90,4 @@ def callback(cb):
 			try: return cb(*argz)
 			except: pass
 		return cb(argz)
+
