@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-import unittest, os, dta, string, re, sys
-from fgc import sh
+import unittest, os, string, re, sys
+from fgc import sh, dta
 
 class SH(unittest.TestCase):
 	'''

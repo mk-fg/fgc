@@ -1,5 +1,6 @@
-from fgc import log
+from __future__ import print_function
 import os
+
 
 def get_enc(src):
 	src_enc = None
@@ -30,7 +31,7 @@ def get_enc(src):
 	return src_enc
 
 
-def recode(src, dst, dst_enc, src_enc=None, err_thresh=10):
+def recode(src, dst, dst_enc, src_enc=None, err_thresh=10, onerror=print):
 	errz = 0
 	if isinstance(src, str):
 		from cStringIO import StringIO
@@ -40,15 +41,15 @@ def recode(src, dst, dst_enc, src_enc=None, err_thresh=10):
 	chr = src.read(1)
 	while chr:
 		try: chr = chr.decode(src_enc).encode(dst_enc)
-		except UnicodeDecodeError, err:
+		except UnicodeDecodeError as err:
 			try:
 				schr = src.read(1)
 				if schr:
 					chr += schr
 					chr = chr.decode(src_enc).encode(dst_enc)
 				else: break
-			except (UnicodeDecodeError,RuntimeError), err:
-				log.warn(err)
+			except (UnicodeDecodeError,RuntimeError) as err:
+				onerror(err)
 				errz += 1
 				if err_thresh and errz > err_thresh: raise RuntimeError, 'Too many decoding errors'
 				src.seek(-1, os.SEEK_CUR)

@@ -1,19 +1,39 @@
 from subprocess import Popen, PIPE
-import os, sys
+import os
 
 
 queue = []
+sem = None
 
 
-def _(*argz, **kwz):
-	'''Execute process in background'''
+def cap(limit):
+	global sem
+	if limit: sem = limit
+	else: sem = None
+def sem_lock():
+	global sem
+	if sem == None: return
+	while sem <= 0:
+		for task in queue:
+			try: proc,cb = task
+			except (TypeError, ValueError): proc,cb = task,None
+			if proc.poll() != None:
+				queue.remove(task)
+				callback(cb)
+				break
+	sem -= 1
+def sem_release():
+	global sem
+	try: sem += 1
+	except TypeError: return
 
-	try:
-		block = kwz.pop('sys')
-		kwz.update(dict(stdin=sys.stdin,stdout=sys.stdout,stderr=sys.stderr))
-	except KeyError:
-		try: block = kwz.pop('block')
-		except KeyError: block = False
+
+def _(*argz, **kwz): # aka 'schedule task'
+
+	try: block = kwz.pop('block')
+	except KeyError: block = False
+
+	if not block: sem_lock() # callback is mandatory in this case, to release semaphore
 
 	if not argz[0][0].startswith('/'):
 		try:
@@ -24,7 +44,7 @@ def _(*argz, **kwz):
 	try: cb = kwz.pop('callback')
 	except KeyError: # No callback given
 		if not block: queue.append(proc(*argz, **kwz))
-		else: return proc(*argz, **kwz).wait()
+		else: proc(*argz, **kwz).wait()
 	else: # Valid callback
 		if not block: queue.append((proc(*argz, **kwz), cb))
 		else:
@@ -65,11 +85,11 @@ def wait(n=-1):
 		proc = queue.pop(0)
 		try: proc,cb = proc
 		except (TypeError, ValueError): cb = None
-		proc.wait()
-		if cb: callback(cb)
+		try: proc.wait()
+		except OSError: pass # No child processes, dunno why it happens
+		callback(cb)
 		try: n -= 1
 		except TypeError: pass
-
 
 
 def callback(cb):
@@ -81,6 +101,7 @@ def callback(cb):
 	 - (callable, argument), otherwise
 	 - callable, if passed spec is not two-element iterable
 	'''
+	sem_release()
 	if not cb: return
 	try: cb,argz = cb
 	except: return cb()
@@ -88,6 +109,6 @@ def callback(cb):
 		if isinstance(argz, dict): return cb(**argz)
 		elif not isinstance(argz, str):
 			try: return cb(*argz)
-			except: pass
+			except TypeError: pass
 		return cb(argz)
 

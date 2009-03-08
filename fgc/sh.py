@@ -7,7 +7,6 @@ Optimized and simplified a lot, since original implementation was rubbish.
 
 import os, sys, stat, re, pwd, grp
 from os.path import abspath
-import logging as log
 
 __all__ = [
 	'uid',
@@ -216,7 +215,7 @@ def rm(path, onerror=None):
 		else: os.remove(path)
 	except OSError, err:
 		if onerror: onerror(path, err)
-		elif not onerror: raise Error, err
+		elif onerror != False: raise Error, err
 
 
 def rr(path, onerror=None, preserve=[], keep_root=False):
@@ -273,8 +272,7 @@ def crawl(top, filter=None, dirs=True, topdown=True, onerror=False):
 				for regex in filter:
 					if regex.search(path): break
 				else: # No matches
-					if onerror == True: log.info('Skipping path "%s" due to filter settings'%path)
-					elif onerror: onerror(crawl, path, sys.exc_info())
+					if onerror: onerror(crawl, path, sys.exc_info())
 					continue
 			yield os.path.join(root, name)
 
@@ -325,3 +323,49 @@ def ln_r(src, dst, skip=[], onerror=None):
 		src, dst, skip=skip, onerror=onerror,
 		atom=lambda *argz,**kwz: cp_d(*argz, **kwz) if os.path.isdir(argz[0]) else ln(*argz[0:2],hard=True)
 	)
+
+
+import fcntl
+
+class flock(object):
+	'''Filesystem lock'''
+	locked = False
+	_lock = None
+	def __init__(self, path, make=False):
+		try: self._lock = open(path)
+		except IOError, err:
+			if make:
+				touch(path)
+				self._lock = open(path)
+			else: raise Error, err
+	def check(self, grab=False):
+		if self.locked: return self.locked
+		try: fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+		except IOError: return None if grab else False
+		else:
+			if grab: return self
+			else:
+				fcntl.flock(self._lock, fcntl.LOCK_UN)
+				return False
+	def acquire(self, timeout=None, interval=5):
+		if not self.locked:
+			if not timeout:
+				fcntl.flock(self._lock, fcntl.LOCK_EX)
+				self.locked = True
+				return self
+			else:
+				for attempt in xrange(0, timeout, interval):
+					attempt = self.check(True)
+					if attempt:
+						self.locked = True
+						return self
+					else: sleep(interval)
+				else: return None
+	def release(self):
+		if self.locked:
+			fcntl.flock(self._lock, fcntl.LOCK_UN)
+			self.locked = False
+		return self
+	def __del__(self): self.release()
+	def __repr__(self): return '<FileLock %s>'%self._lock
+	__str__ = __repr__
