@@ -1,5 +1,5 @@
 from subprocess import Popen, PIPE
-import os
+import os, sys
 
 
 queue = []
@@ -10,7 +10,7 @@ def cap(limit):
 	global sem
 	if limit: sem = limit
 	else: sem = None
-def sem_lock():
+def _sem_lock():
 	global sem
 	if sem == None: return
 	while sem <= 0:
@@ -22,18 +22,22 @@ def sem_lock():
 				callback(cb)
 				break
 	sem -= 1
-def sem_release():
+def _sem_release():
 	global sem
 	try: sem += 1
 	except TypeError: return
 
 
-def _(*argz, **kwz): # aka 'schedule task'
+def add(*argz, **kwz): # aka 'schedule task'
 
 	try: block = kwz.pop('block')
 	except KeyError: block = False
+	try:
+		block |= kwz.pop('sys')
+		kwz.update(dict(stdin=sys.stdin,stdout=sys.stdout,stderr=sys.stderr))
+	except KeyError: pass
 
-	if not block: sem_lock() # callback is mandatory in this case, to release semaphore
+	if not block: _sem_lock() # callback is mandatory in this case, to release semaphore
 
 	if not argz[0][0].startswith('/'):
 		try:
@@ -42,15 +46,17 @@ def _(*argz, **kwz): # aka 'schedule task'
 		except (ImportError, AttributeError): pass
 
 	try: cb = kwz.pop('callback')
-	except KeyError: # No callback given
+	except KeyError: # no callback given
 		if not block: queue.append(proc(*argz, **kwz))
-		else: proc(*argz, **kwz).wait()
-	else: # Valid callback
+		else: return proc(*argz, **kwz).wait()
+	else: # valid callback
 		if not block: queue.append((proc(*argz, **kwz), cb))
 		else:
-			proc(*argz, **kwz).wait()
+			err = proc(*argz, **kwz).wait()
 			callback(cb)
+			return err
 
+_ = add # for compatibility reasons
 
 def proc(*argz, **kwz):
 	#~ if kwz.has_key('stdin') and not kwz.has_key('bufsize'): kwz['bufsize'] = 1
@@ -86,7 +92,7 @@ def wait(n=-1):
 		try: proc,cb = proc
 		except (TypeError, ValueError): cb = None
 		try: proc.wait()
-		except OSError: pass # No child processes, dunno why it happens
+		except OSError: pass # no child processes, dunno why it happens
 		callback(cb)
 		try: n -= 1
 		except TypeError: pass
@@ -101,7 +107,7 @@ def callback(cb):
 	 - (callable, argument), otherwise
 	 - callable, if passed spec is not two-element iterable
 	'''
-	sem_release()
+	_sem_release()
 	if not cb: return
 	try: cb,argz = cb
 	except: return cb()
