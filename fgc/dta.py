@@ -15,6 +15,8 @@ def reldate(date, now = None):
 	else: return date.strftime('%b %Y')
 
 
+atomic = str, int, float, unicode
+
 class do:
 	'''DataObject'''
 	def __init__(self, **kwz):
@@ -33,17 +35,15 @@ class do:
 		except KeyError: pass
 		return data if not y else rmap(data, y)
 
-class cfg(do):
-	'''Container class for various options'''
 
-def rmap(data, y=lambda x:x, atomic=(str,int,unicode)):
+def rmap(data, y=lambda x:x, atomic=atomic):
 	'''Returns data,
 	with values of all iterable elements processed thru function y recursively'''
 	if not isinstance(data, atomic) and data is not None:
 		try: return dict([(k, rmap(v, y)) for k,v in data.iteritems()])
 		except AttributeError: return [rmap(i, y) for i in data]
 	else: return y(data)
-def ormap(data, y=lambda x:x, atomic=(str,int,unicode)):
+def ormap(data, y=lambda x:x, atomic=atomic):
 	'''Returns nested data objects,
 	with values of all iterable elements processed thru function y recursively'''
 	if not isinstance(data, atomic) and data is not None:
@@ -57,6 +57,4 @@ def ormap(data, y=lambda x:x, atomic=(str,int,unicode)):
 
 
 import string, random
-def uid(len=8, charz=string.hexdigits):
-	'''Returns random string of a specified length and pattern'''
-	return ''.join(random.sample(''.join(charz), len))
+def uid(len=8, charz=string.hexdigits): return ''.join(random.sample(''.join(charz), len))

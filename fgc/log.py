@@ -1,5 +1,6 @@
-import logging
+import logging, sys
 logging._extz = []
+logging.currentframe = lambda: sys._getframe(4) # skip traces from this module
 ls = logging.getLogger('core')
 ls._errz = ls._msgz = 0
 ls._errl = logging.WARNING # Which msgz are considered worth reporting on errz() call
@@ -15,6 +16,11 @@ for val,name in logging._levelNames.iteritems():
 def fatal(*argz, **kwz):
 	if ls.level <= CRITICAL: ls._msgz += 1
 	if ls._errl <= CRITICAL: ls._errz += 1
+	try: crash = kwz.pop('crash')
+	except KeyError: pass
+	else:
+		ls.critical(*argz, **kwz)
+		sys.exit(crash)
 	return ls.critical(*argz, **kwz)
 def error(*argz, **kwz):
 	if ls.level <= ERROR: ls._msgz += 1
@@ -60,7 +66,12 @@ def cfg(*argz, **kwz):
 	except KeyError: pass
 	else: ls._errl = key
 	_add_handlers(ls, kwz)
-	return logging.basicConfig(*argz, **kwz)
+	kwz_ext = {
+		'format': '%(asctime)s %(levelname)s %(module)s.%(funcName)s: %(message)s',
+		'datefmt': '(%d.%m.%y %H:%M:%S)'
+	}
+	kwz_ext.update(kwz)
+	return logging.basicConfig(*argz, **kwz_ext)
 
 def extra(*argz, **kwz):
 	'''Add extra logging stream'''
@@ -68,3 +79,4 @@ def extra(*argz, **kwz):
 	logging._extz.append(ext)
 	_add_handlers(ext, kwz)
 	return ext
+
