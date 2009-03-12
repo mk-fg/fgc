@@ -17,10 +17,10 @@ def reldate(date, now = None):
 
 class do:
 	'''DataObject'''
-	def __init__(self, *argz, **kwz):
-		if argz: self._data = argz[0] if len(argz)  == 1 else argz
+	def __init__(self, **kwz):
 		if kwz:
-			for k,v in kwz.iteritems(): setattr(self, k, v)
+			self._data = kwz
+			for k,v in kwz.iteritems(): setattr(self, k, ormap(v))
 	def __repr__(self):
 		return str(self.get())
 	def __getitem__(self, k):
@@ -54,7 +54,6 @@ def ormap(data, y=lambda x:x, atomic=(str,int,unicode)):
 		except AttributeError: return [ormap(i, y) for i in data]
 	else: skel = y(data) # should be 'do(...)', but not everything expects polymorphic object instead of str
 	return skel
-
 
 
 import string, random

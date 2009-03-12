@@ -30,7 +30,7 @@ def get_enc(src):
 	return src_enc
 
 
-def recode(src, dst, dst_enc, src_enc=None, err_thresh=10):
+def recode(src, dst, dst_enc, src_enc=None, err_thresh=10, dirty=False):
 	errz = 0
 	if isinstance(src, str):
 		from cStringIO import StringIO
@@ -39,13 +39,16 @@ def recode(src, dst, dst_enc, src_enc=None, err_thresh=10):
 	src.seek(0)
 	chr = src.read(1)
 	while chr:
-		try: chr = chr.decode(src_enc).encode(dst_enc)
+		try:
+			if dirty: chr = chr.decode('utf8').encode(src_enc).decode(dst_enc).encode('utf8')
+			else: chr = chr.decode(src_enc).encode(dst_enc)
 		except UnicodeDecodeError, err:
 			try:
 				schr = src.read(1)
 				if schr:
 					chr += schr
-					chr = chr.decode(src_enc).encode(dst_enc)
+					if dirty: chr = chr.decode('utf8').encode(src_enc).decode(dst_enc).encode('utf8')
+					else: chr = chr.decode(src_enc).encode(dst_enc)
 				else: break
 			except (UnicodeDecodeError,RuntimeError), err:
 				log.warn(err)
