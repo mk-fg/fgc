@@ -245,9 +245,8 @@ def crawl(top, filter=None, exclude=None, dirs=True, topdown=True, onerror=False
 			path = os.path.join(root, name)
 			if exclude:
 				for regex in exclude:
-					if match = regex.search(path):
-						if onerror: onerror(crawl, path, sys.exc_info())
-						break
+					match = regex.search(path)
+					if match: break
 				else: match = None
 				if match:
 					if onerror: onerror(crawl, path, sys.exc_info())
@@ -309,19 +308,22 @@ def ln_r(src, dst, skip=[], onerror=None):
 	)
 
 
+from time import sleep
 import fcntl
 
-class flock(object):
+class flock:
 	'''Filesystem lock'''
 	locked = False
 	_lock = None
-	def __init__(self, path, make=False):
+	_del = False
+	def __init__(self, path, make=False, remove=None):
 		try: self._lock = open(path)
 		except IOError, err:
 			if make:
 				touch(path)
 				self._lock = open(path)
 			else: raise Error, err
+		if remove: self._del = path
 	def check(self, grab=False):
 		if self.locked: return self.locked
 		try: fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -350,6 +352,8 @@ class flock(object):
 			fcntl.flock(self._lock, fcntl.LOCK_UN)
 			self.locked = False
 		return self
-	def __del__(self): self.release()
+	def __del__(self):
+		self.release()
+		if self._del: rm(self._del)
 	def __repr__(self): return '<FileLock %s>'%self._lock
 	__str__ = __repr__

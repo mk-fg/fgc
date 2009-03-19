@@ -1,7 +1,7 @@
 from datetime import datetime
 
 def reldate(date, now = None):
-	'''Returns date in human-readable format'''
+	'''Returns date in easily-readable format'''
 	if isinstance(date, str): date = int(date)
 	if isinstance(date, (int, float)): date = datetime.fromtimestamp(date)
 	if not now: now = datetime.now()
@@ -15,14 +15,19 @@ def reldate(date, now = None):
 	else: return date.strftime('%b %Y')
 
 
-atomic = str, int, float, unicode
-
 class do:
 	'''DataObject'''
-	def __init__(self, **kwz):
-		if kwz:
-			self._data = kwz
-			for k,v in kwz.iteritems(): setattr(self, k, ormap(v))
+	_data = {}
+	def __init__(self, *argz, **kwz):
+		## TODO: Implement recursive updates (dunno what for))
+		dta = dict()
+		if argz:
+			import yaml
+			for arg in argz: dta.update(yaml.load(open(arg)))
+		dta.update(kwz)
+		if dta:
+			self._data = dta
+			for k,v in dta.iteritems(): setattr(self, k, ormap(v))
 	def __repr__(self):
 		return str(self.get())
 	def __getitem__(self, k):
@@ -34,7 +39,12 @@ class do:
 			if key != None: data = data[key]
 		except KeyError: pass
 		return data if not y else rmap(data, y)
+	def set(self, k, v):
+		self._data[k] = v
+		setattr(self, k, ormap(v))
 
+
+atomic = str, int, float, unicode
 
 def rmap(data, y=lambda x:x, atomic=atomic):
 	'''Returns data,
@@ -54,6 +64,20 @@ def ormap(data, y=lambda x:x, atomic=atomic):
 		except AttributeError: return [ormap(i, y) for i in data]
 	else: skel = y(data) # should be 'do(...)', but not everything expects polymorphic object instead of str
 	return skel
+
+
+from copy import deepcopy
+def imap(a, b):
+	try: a = a.get()
+	except (AttributeError, TypeError): a = deepcopy(a)
+	try: b = b.get()
+	except (AttributeError, TypeError): pass
+	try: b = filter(lambda x: x[0] in a, b.iteritems())
+	except AttributeError: a = b
+	else:
+		try: a.update(b)
+		except: a = b
+	return a
 
 
 import string, random
