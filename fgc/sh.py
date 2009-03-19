@@ -8,33 +8,6 @@ Optimized and simplified a lot, since original implementation was rubbish.
 import os, sys, stat, re, pwd, grp
 from os.path import abspath
 
-__all__ = [
-	'uid',
-	'cp_cat',
-	'cp_p',
-	'cp_r',
-	'rr',
-	'uname',
-	'gname',
-	'touch',
-	'cp',
-	'cp_d',
-	'grp',
-	'mkdir',
-	'_cmp',
-	'gid',
-	'rm',
-	'cp_stat',
-	'getids',
-	'Error',
-	'cat',
-	'mv',
-	'crawl',
-	'ln',
-	'ln_r'
-]
-
-
 
 class Error(EnvironmentError):
 	'''Something went wrong'''
@@ -258,20 +231,31 @@ def mv(src, dst):
 		rr(src)
 
 
-def crawl(top, filter=None, dirs=True, topdown=True, onerror=False):
+def crawl(top, filter=None, exclude=None, dirs=True, topdown=True, onerror=False):
 	'''Filesystem nodes iterator.'''
 	nodes = []
 	try: filter = filter and [re.compile(filter)]
 	except TypeError: filter = [re.compile(regex) for regex in filter]
+	try: exclude = exclude and [re.compile(exclude)]
+	except TypeError: exclude = [re.compile(regex) for regex in exclude]
 	for root, d, f in os.walk(top, topdown=topdown):
 		root = root[len(top):].lstrip('/')
 		if dirs: f = d + f # dirs first
 		for name in f:
 			path = os.path.join(root, name)
+			if exclude:
+				for regex in exclude:
+					if match = regex.search(path):
+						if onerror: onerror(crawl, path, sys.exc_info())
+						break
+				else: match = None
+				if match:
+					if onerror: onerror(crawl, path, sys.exc_info())
+					continue
 			if filter:
 				for regex in filter:
 					if regex.search(path): break
-				else: # No matches
+				else:
 					if onerror: onerror(crawl, path, sys.exc_info())
 					continue
 			yield os.path.join(root, name)

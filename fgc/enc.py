@@ -44,12 +44,14 @@ def recode(src, dst_enc, dst=None, src_enc=None, err_thresh=10, onerror=print, d
 		try:
 			if dirty: chr = chr.decode('utf8').encode(src_enc).decode(dst_enc).encode('utf8')
 			else: chr = chr.decode(src_enc).encode(dst_enc)
-		except UnicodeDecodeError, err:
+		except UnicodeDecodeError as err:
 			try:
 				schr = src.read(1)
 				if schr:
 					chr += schr
-					if dirty: chr = chr.decode('utf8').encode(src_enc).decode(dst_enc).encode('utf8')
+					if dirty:
+						try: chr = chr.decode('utf8').encode(src_enc).decode(dst_enc).encode('utf8')
+						except UnicodeDecodeError as err: onerror(err)
 					else: chr = chr.decode(src_enc).encode(dst_enc)
 				else: break
 			except (UnicodeDecodeError,RuntimeError) as err:
