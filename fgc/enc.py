@@ -1,6 +1,6 @@
 from __future__ import print_function
-from cStringIO import StringIO
-import os
+from cStringIO import StringIO as sio
+import os, re
 
 
 def get(src):
@@ -11,7 +11,7 @@ def get(src):
 		('cp1251', xrange(0xe0, 0xff), 0)
 	)
 	encs = dict([(enc[0], 0) for enc in sets])
-	if isinstance(src, str): src = StringIO(src)
+	if isinstance(src, str): src = sio(src)
 	src.seek(0)
 	chr = ord(src.read(1))
 	while chr:
@@ -35,8 +35,8 @@ def get(src):
 
 def recode(src, dst_enc, dst=None, src_enc=None, err_thresh=10, onerror=print, dirty=False):
 	errz = 0
-	if isinstance(src, str): src = StringIO(src)
-	dst_buffer = dst or StringIO()
+	if isinstance(src, str): src = sio(src)
+	dst_buffer = dst or sio()
 	if not src_enc: src_enc = get(src)
 	src.seek(0)
 	chr = src.read(1)
@@ -63,3 +63,4 @@ def recode(src, dst_enc, dst=None, src_enc=None, err_thresh=10, onerror=print, d
 		chr = src.read(1)
 	dst_buffer.seek(0)
 	return dst or dst_buffer.read()
+
