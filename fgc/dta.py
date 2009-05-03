@@ -1,59 +1,42 @@
-class do:
-	'''DataObject'''
-	_data = {}
+from string import whitespace as spaces
+from contextlib import contextmanager
+
+atomic = str, int, float, unicode # data types, considered uniterable
+do_init = lambda dta: do( (k, do_init(v)) for k,v in dta.iteritems() ) if isinstance(dta, dict) else dta
+
+@contextmanager
+def _import(path):
+	try: yield __import(path)
+	except Exception, ex: raise ex
+def __import(path):
+	def _process(cfg):
+		try: return yaml.load(cfg)
+		except yaml.scanner.ScannerError: return json.loads(cfg)
+	with open(path) as cfg:
+		json_format = (cfg.readline().strip(spaces) == '{')
+		cfg.seek(0)
+		return _process(cfg.read().replace('\n', '') if json_format else cfg)
+
+class do(dict):
+	'''DataObject - dict with JS-like key=attr access'''
 	def __init__(self, *argz, **kwz):
-		## TODO: Implement recursive updates (dunno what for))
-		dta = dict()
-		if argz:
-			import yaml
-			for arg in argz: dta.update(yaml.load(open(arg)))
-		dta.update(kwz)
-		if dta:
-			self._data = dta
-			for k,v in dta.iteritems(): setattr(self, k, ormap(v))
-	def __repr__(self):
-		return str(self.get())
-	def __getitem__(self, k):
-		return self.get(k)
-	def get(self, key=None, y=None):
-		try: data = self._data
-		except AttributeError: data = self.__dict__
-		try:
-			if key != None: data = data[key]
-		except KeyError: pass
-		return data if not y else rmap(data, y)
-	def set(self, k, v):
-		self._data[k] = v
-		setattr(self, k, ormap(v))
-
-
-atomic = str, int, float, unicode
-
-def rmap(data, y=lambda x:x, atomic=atomic):
-	'''Returns data,
-	with values of all iterable elements processed thru function y recursively'''
-	if not isinstance(data, atomic) and data is not None:
-		try: return dict([(k, rmap(v, y)) for k,v in data.iteritems()])
-		except AttributeError: return [rmap(i, y) for i in data]
-	else: return y(data)
-def ormap(data, y=lambda x:x, atomic=atomic):
-	'''Returns nested data objects,
-	with values of all iterable elements processed thru function y recursively'''
-	if not isinstance(data, atomic) and data is not None:
-		skel = do()
-		try:
-			skel._data = rmap(data, y)
-			for k,v in data.iteritems(): setattr(skel, k, ormap(v, y))
-		except AttributeError: return [ormap(i, y) for i in data]
-	else: skel = y(data) # should be 'do(...)', but not everything expects polymorphic object instead of str
-	return skel
+		if len(argz) and isinstance(argz[0], atomic):
+			with _import(argz[0]) as cfg: super(do, self).__init__(cfg)
+			for arg in argz[1:]:
+				with _import(arg) as cfg: self.update(cfg)
+		else: super(do, self).__init__(*argz, **kwz)
+		for k,v in self.iteritems(): self[k] = do_init(v)
+	def __getattr__(self, k): return self[k]
+	def __setattr__(self, k, v): dict.__setitem__(self, k, do_init(v))
 
 
 def chain(*argz):
 	for arg in argz:
 		if isinstance(arg, atomic): yield arg
 		else:
-			for sub in arg: yield sub
+			try:
+				for sub in arg: yield sub
+			except TypeError: yield arg
 
 
 from copy import deepcopy

@@ -65,13 +65,13 @@ def pipe(*argz, **kwz):
 	return proc(*argz, **nkwz)
 def pin(*argz, **kwz):
 	if not argz or not isinstance(argz[0], (tuple, list)):
-		from hosting.config import cfg
+		from fgc.config import cfg
 		if argz: kwz['stdin'] = open(argz[0], 'rb') if isinstance(argz[0], str) else argz[0]
 		argz = ([os.path.join(cfg.paths.bin, 'gzip'), '-d'],)
 	return pipe(*argz, **kwz).stdout
 def pout(*argz, **kwz):
 	if not argz or not isinstance(argz[0], (tuple, list)):
-		from hosting.config import cfg
+		from fgc.config import cfg
 		if argz: kwz['stdout'] = open(argz[0], 'wb') if isinstance(argz[0], str) else argz[0]
 		argz = ([os.path.join(cfg.paths.bin, 'gzip')],)
 	return pipe(*argz, **kwz).stdin
@@ -121,7 +121,7 @@ def callback(cb):
 from threading import Thread
 from collections import deque
 from time import sleep
-from hosting import log
+from fgc import log
 
 
 class Threader(object):

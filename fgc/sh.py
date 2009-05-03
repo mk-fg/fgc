@@ -7,10 +7,14 @@ Optimized and simplified a lot, since original implementation was rubbish.
 
 import os, sys, stat, re, pwd, grp
 from os.path import abspath
+from fgc import log
+
 
 
 class Error(EnvironmentError):
 	'''Something went wrong'''
+class LockError(EnvironmentError):
+	'''Inability to acquire lock'''
 
 
 def getids(user):
@@ -300,34 +304,43 @@ def ln(src, dst, hard=False, recursive=False):
 	except OSError, err: raise Error, err
 
 
-def ln_r(src, dst, skip=[], onerror=None):
-	'''Make a hardlink-tree from an existing one.'''
-	return cp_r(
-		src, dst, skip=skip, onerror=onerror,
-		atom=lambda *argz,**kwz: cp_d(*argz, **kwz) if os.path.isdir(argz[0]) else ln(*argz[0:2],hard=True)
-	)
+def df(path):
+	'''Get (size, available) disk space, bytes'''
+	df = os.statvfs(path)
+	return (df.f_blocks * df.f_bsize, df.f_bavail * df.f_bsize)
+
+
+from tempfile import mkstemp
+def mktemp(path):
+	tmp_path, tmp = os.path.split(path)
+	tmp_path = mkstemp(prefix=tmp+os.extsep, dir=tmp_path)[1]
+	commit = lambda: mv(tmp_path, path)
+	return open(tmp_path, 'w'), commit
 
 
 from time import sleep
 import fcntl
 
-class flock:
+class flock(object):
 	'''Filesystem lock'''
-	locked = False
-	_lock = None
-	_del = False
-	def __init__(self, path, make=False, remove=None):
+	__slots__ = ('locked', '_lock', '_type', '_del')
+	def __init__(self, path, make=False, shared=False, remove=None):
+		self.locked = self._del = False
+		if remove == None: remove = make
 		try: self._lock = open(path)
-		except IOError, err:
+		except (IOError,OSError), err:
 			if make:
 				touch(path)
 				self._lock = open(path)
 			else: raise Error, err
 		if remove: self._del = path
+		self._type = fcntl.LOCK_EX if not shared else fcntl.LOCK_SH
 	def check(self, grab=False):
 		if self.locked: return self.locked
 		try: fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-		except IOError: return None if grab else False
+		except IOError, ex:
+			if not grab: return False
+			else: return None
 		else:
 			if grab: return self
 			else:
@@ -345,8 +358,10 @@ class flock:
 					if attempt:
 						self.locked = True
 						return self
-					else: sleep(interval)
-				else: return None
+					else:
+						log.debug('Waiting for lock: %s'%self._lock)
+						sleep(interval)
+				else: raise LockError('Unable to acquire lock: %s'%self._lock)
 	def release(self):
 		if self.locked:
 			fcntl.flock(self._lock, fcntl.LOCK_UN)
@@ -355,5 +370,6 @@ class flock:
 	def __del__(self):
 		self.release()
 		if self._del: rm(self._del)
-	def __repr__(self): return '<FileLock %s>'%self._lock
-	__str__ = __repr__
+	__str__ = __repr__ = lambda s: '<FileLock %s>'%self._lock
+	def __enter__(self): return self.acquire()
+	def __exit__(self, ex_type, ex_val, ex_trace): self.release()
