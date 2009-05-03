@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta, tzinfo
-import re
+import re, time
 
 def reldate(date, now = None):
 	'''Returns date in easily-readable format'''
 	if isinstance(date, str): date = int(date)
 	if isinstance(date, (int, float)): date = datetime.fromtimestamp(date)
+	if isinstance(date, time.struct_time): date = datetime(*date[0:5])
 	if not now: now = datetime.now()
 	diff = abs((date.date() - now.date()).days)
 	if diff == 0: return date.strftime('%H:%M')
