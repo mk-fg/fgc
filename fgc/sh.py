@@ -370,6 +370,6 @@ class flock(object):
 	def __del__(self):
 		self.release()
 		if self._del: rm(self._del)
-	__str__ = __repr__ = lambda s: '<FileLock %s>'%self._lock
+	__str__ = __repr__ = lambda s: '<FileLock %s>'%s._lock
 	def __enter__(self): return self.acquire()
 	def __exit__(self, ex_type, ex_val, ex_trace): self.release()

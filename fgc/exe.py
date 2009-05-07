@@ -118,50 +118,62 @@ def callback(cb):
 
 
 
-from threading import Thread
-from collections import deque
-from time import sleep
-from fgc import log
-
+from threading import Thread, BoundedSemaphore
+import itertools as it, operator as op, functools as ft
+import Queue
 
 class Threader(object):
-	_pool = None # threads count semaphore value (none - no threads)
-	_threads = deque()
-	_op = lambda *argz,**kwz: None # atomic operation
+	def __init__(self, process=1, results=None, timeout=5):
+		self._threads = list()
+		self._threads_limit = process
+		if isinstance(results, int):
+			results -= process
+			if results <= 0: raise ValueError('Results limit must be higher than processing limit')
+			self._results = Queue.Queue(results)
+		elif results is None: self._results = Queue.Queue()
+		else: self._results = results # custom object
+		self._feed = Queue.Queue()
+		self._next = ft.partial(self.get, timeout=timeout)
 
-	def __init__(self, threads=None, cooldown=1, op=None):
-		self.data = {}
-		self._cooldown = cooldown # time between checks for completed queries
-		if threads: self._pool = threads
-		if op: self._op = op
+	def _worker(self):
+		while True:
+			try: idx, task = self._feed.get()
+			except TypeError: # poison
+				self._feed.task_done()
+				break
+			try: self._results.put( (idx, task()) )
+			finally: self._feed.task_done() # even if task fails
 
-	def _get(self, *argz,**kwz): self.data[argz[0]] = self._op(*argz,**kwz)
+	def get(self, *argz, **kwz):
+		if not self._feed.unfinished_tasks and self._results.empty(): self.close(True)
+		if not argz: # handle standard queue "block" argument
+			try: argz = [bool(kwz['timeout'] or True)] # (timeout is 0/False) = block
+			except: argz = [True]
+		try: return self._results.get(*argz, **kwz) # so get can be overridden in results
+		except Queue.Empty: self.close(True) # for standard results queue, in case of timeout
+	def put(self, task):
+		if len(self._threads) < self._threads_limit:
+			thread = Thread(target=self._worker)
+			thread.setDaemon(True)
+			thread.start()
+			self._threads.append(thread)
+		self._feed.put(task)
 
-	def get(self, *argz,**kwz):
-		try:
-			self._pool -= 1
-			try: # failsafe thread creation, in case of low resources
-				thread = Thread(target=self._get, args=argz, kwargs=kwz)
-				thread.start()
-			except thread.error: self._get(*argz,**kwz)
-			else: self._threads.append(thread)
-			cooldown = len(self._threads)
-			while self._pool < 0: # try joining some thread, starting from the oldest
-				thread = self._threads.popleft()
-				thread.join(0)
-				if not thread.is_alive(): self._pool += 1 # gotcha!
-				else: self._threads.append(thread) # push it back to queue end
-				if cooldown <= 0: # all threads were probed, sleeping
-					sleep(self._cooldown)
-					cooldown = len(self._threads)
-					log.debug('Thread queue full (%s), waiting for %ss'%(cooldown, self._cooldown))
-				else: cooldown -= 1
-		except:
-			log.debug('Performing blocking op: %s (%s, %s)'%(self._op, argz,kwz))
-			self._get(*argz,**kwz)
+	def _lock(self, *argz, **kwz): raise StopIteration
+	def close(self, iter=False):
+		self.put = self.get = self._lock # block any further I/O
+		for i in xrange(len(self._threads)): self._feed.put(None) # poison all threads
+		while self._threads: self._threads.pop().join(0) # collect the cadavers, if not hung
+		if iter: raise StopIteration
 
-	def wait(self):
-		while self._threads: self._threads.popleft().join()
-		data = self.data
-		self.data = {} # cleanup, so the object can be reused
-		return data
+	get_nowait = ft.partial(get, to=0)
+	put_nowait = ft.partial(put, to=0)
+
+	def __del__(self):
+		if self._threads:
+			for i in xrange(len(self._threads)): self._feed.put(None) # poison all threads
+			while self._threads: self._threads.pop().join() # collect the cadavers
+
+	next = lambda s: s._next()
+	__iter__ = lambda s: s
+
