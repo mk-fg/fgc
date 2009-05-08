@@ -13,8 +13,6 @@ from fgc import log
 
 class Error(EnvironmentError):
 	'''Something went wrong'''
-class LockError(EnvironmentError):
-	'''Inability to acquire lock'''
 
 
 def getids(user):
@@ -60,6 +58,9 @@ def mode(mode):
 		return val
 	else:
 		raise Error, 'Unrecognized file system mode format: %s'%mode
+
+
+def chown(path, uid=-1, gid=-1): os.chown(path, uid, gid)
 
 
 def cat(fsrc, fdst, length=16*1024, recode=None):
@@ -304,6 +305,20 @@ def ln(src, dst, hard=False, recursive=False):
 	except OSError, err: raise Error, err
 
 
+import itertools as it, operator as op, functools as ft
+from glob import iglob
+_glob_cbex = re.compile(r'\{[^}]+\}')
+def glob(pattern):
+	'''Globbing with braces expansion'''
+	subs = list()
+	while True:
+		ex = _glob_cbex.search(pattern)
+		if not ex: break
+		subs.append(ex.group(0)[1:-1].split(','))
+		pattern = pattern[:ex.span()[0]] + '%s' + pattern[ex.span()[1]:]
+	return it.chain.from_iterable( iglob(pattern%combo) for combo in product(*subs) ) if subs else (pattern,)
+
+
 def df(path):
 	'''Get (size, available) disk space, bytes'''
 	df = os.statvfs(path)
@@ -312,14 +327,19 @@ def df(path):
 
 from tempfile import mkstemp
 def mktemp(path):
+	'''Helper function to return tmp fhandle and callback to move it into a given place'''
 	tmp_path, tmp = os.path.split(path)
 	tmp_path = mkstemp(prefix=tmp+os.extsep, dir=tmp_path)[1]
 	commit = lambda: mv(tmp_path, path)
 	return open(tmp_path, 'w'), commit
 
 
+
 from time import sleep
 import fcntl
+
+class LockError(EnvironmentError):
+	'''Inability to acquire lock'''
 
 class flock(object):
 	'''Filesystem lock'''
@@ -338,9 +358,9 @@ class flock(object):
 	def check(self, grab=False):
 		if self.locked: return self.locked
 		try: fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-		except IOError, ex:
+		except IOError as ex:
 			if not grab: return False
-			else: return None
+			else: return None # checked internally
 		else:
 			if grab: return self
 			else:

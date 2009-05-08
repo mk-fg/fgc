@@ -176,4 +176,3 @@ class Threader(object):
 
 	next = lambda s: s._next()
 	__iter__ = lambda s: s
-
