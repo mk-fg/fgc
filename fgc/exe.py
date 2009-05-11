@@ -29,7 +29,17 @@ def _sem_release():
 
 
 def add(*argz, **kwz): # aka 'schedule task'
-
+	'''
+	Managed task creation, which can have callback and
+	 is a subject to further management via wait function.
+	Any non-absolute cmd paths are subject to extension
+	 relative to cfg.paths.bin parameter, if any.
+	Special kwz:
+		sys - simulates os.system call (but w/ solid argz and extended
+		 management), implies block.
+		block - blocking operation.
+		callback - started or scheduled after wait call, see callback function.
+	'''
 	try: block = kwz.pop('block')
 	except KeyError: block = False
 	try:
@@ -63,13 +73,13 @@ def pipe(*argz, **kwz):
 	nkwz = dict(stdin=PIPE, stdout=PIPE, stderr=PIPE)
 	nkwz.update(kwz)
 	return proc(*argz, **nkwz)
-def pin(*argz, **kwz):
+def pin(*argz, **kwz): # pipe.stdout or "gzip < file |", if single str is given
 	if not argz or not isinstance(argz[0], (tuple, list)):
 		from fgc.config import cfg
 		if argz: kwz['stdin'] = open(argz[0], 'rb') if isinstance(argz[0], str) else argz[0]
 		argz = ([os.path.join(cfg.paths.bin, 'gzip'), '-d'],)
 	return pipe(*argz, **kwz).stdout
-def pout(*argz, **kwz):
+def pout(*argz, **kwz): # pipe.stdin or "| gzip > file", if single str is given
 	if not argz or not isinstance(argz[0], (tuple, list)):
 		from fgc.config import cfg
 		if argz: kwz['stdout'] = open(argz[0], 'wb') if isinstance(argz[0], str) else argz[0]
@@ -80,9 +90,9 @@ def pout(*argz, **kwz):
 def wait(n=-1):
 	'''
 	Wait for running subprocesses to finish.
-	n can be set to 0 (or None), to wait only for currently running
-	processes, but not their callbacks, if any. If n is lesser than zero
-	it'll run 'till all subprocesses have died.
+	 n can be set to 0 (or None), to wait only for currently running
+	 processes, but not their callbacks, if any. If n is lesser than zero
+	 it'll run 'till all subprocesses have died.
 	'''
 	if not n: n = len(queue)
 	while n and queue:
@@ -100,10 +110,10 @@ def callback(cb):
 	'''
 	Run callback, extracted from passed function.
 	Callback will be interpreted as following:
-	 - (callable, keywords), if second tuple element is dict
-	 - (callable, arguments), if it's iterable
-	 - (callable, argument), otherwise
-	 - callable, if passed spec is not two-element iterable
+		- (callable, keywords), if second element is dict
+		- (callable, arguments), if it's some iterable
+		- (callable, argument), otherwise
+		- callable, if passed spec is not a two-element iterable
 	'''
 	_sem_release()
 	if not cb: return

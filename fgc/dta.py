@@ -10,8 +10,10 @@ def _import(path):
 	except Exception, ex: raise ex
 def __import(path):
 	def _process(cfg):
-		try: return yaml.load(cfg)
-		except yaml.scanner.ScannerError: return json.loads(cfg)
+		try:
+			import yaml
+			return yaml.load(cfg)
+		except: return json.loads(cfg)
 	with open(path) as cfg:
 		json_format = (cfg.readline().strip(spaces) == '{')
 		cfg.seek(0)
@@ -37,6 +39,18 @@ def chain(*argz):
 			try:
 				for sub in arg: yield sub
 			except TypeError: yield arg
+
+
+def overlap(*argz):
+	argz = list(iter(arg) for arg in argz)
+	while argz:
+		val = argz # to avoid bogus matches
+		for arg in list(argz):
+			try:
+				if not val is argz: arg.next()
+				else: val = arg.next()
+			except StopIteration: argz.remove(arg)
+		if argz: yield val # every arg could be depleted
 
 
 from copy import deepcopy
