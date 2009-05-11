@@ -53,19 +53,5 @@ def overlap(*argz):
 		if argz: yield val # every arg could be depleted
 
 
-from copy import deepcopy
-def imap(a, b):
-	try: a = a.get()
-	except (AttributeError, TypeError): a = deepcopy(a)
-	try: b = b.get()
-	except (AttributeError, TypeError): pass
-	try: b = filter(lambda x: x[0] in a, b.iteritems())
-	except AttributeError: a = b
-	else:
-		try: a.update(b)
-		except: a = b
-	return a
-
-
 import string, random
 def uid(len=8, charz=string.hexdigits): return ''.join(random.sample(''.join(charz), len))
