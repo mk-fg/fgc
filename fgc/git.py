@@ -137,7 +137,9 @@ def perm_apply():
 		except ValueError: uid, gid = ownage.split(':', 1) # Deprecated format w/o mode
 		try:
 			os.lchown(path, sh.uid(uid), sh.gid(gid))
-			os.chmod(path, int(mode, 8))
+			try: os.lchmod(path, int(mode, 8)) # py2.6+ only
+			except AttributeError:
+				if not os.path.islink(path): os.chmod(path, int(mode, 8))
 		except OSError:
 			errz = True
 			log.error('Unable to set permissions %s for path %s'%(ownage, path))
