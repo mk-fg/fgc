@@ -60,7 +60,12 @@ def mode(mode):
 		raise Error, 'Unrecognized file system mode format: %s'%mode
 
 
-def chown(path, uid=-1, gid=-1): os.chown(path, uid, gid)
+def chown(path, uid=-1, gid=-1, deference=True):
+	if deference: os.chown(path, uid, gid)
+	else: os.lchown(path, uid, gid)
+def chmod(path, mode, deference=True):
+	if deference: os.chmod(path, mode)
+	else: os.lchmod(path, mode)
 
 
 def cat(fsrc, fdst, length=16*1024, recode=None):
