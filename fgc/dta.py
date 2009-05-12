@@ -7,7 +7,7 @@ do_init = lambda dta: do( (k, do_init(v)) for k,v in dta.iteritems() ) if isinst
 @contextmanager
 def _import(path):
 	try: yield __import(path)
-	except Exception, ex: raise ex
+	except Exception as ex: raise ex
 def __import(path):
 	def _process(cfg):
 		try:

@@ -310,7 +310,7 @@ def ln(src, dst, hard=False, recursive=False):
 	except OSError, err: raise Error, err
 
 
-import itertools as it, operator as op, functools as ft
+import itertools as it
 from glob import iglob
 _glob_cbex = re.compile(r'\{[^}]+\}')
 def glob(pattern):
@@ -321,7 +321,7 @@ def glob(pattern):
 		if not ex: break
 		subs.append(ex.group(0)[1:-1].split(','))
 		pattern = pattern[:ex.span()[0]] + '%s' + pattern[ex.span()[1]:]
-	return it.chain.from_iterable( iglob(pattern%combo) for combo in product(*subs) ) if subs else iglob(pattern)
+	return it.chain.from_iterable( iglob(pattern%combo) for combo in it.product(*subs) ) if subs else iglob(pattern)
 
 
 def df(path):
@@ -335,7 +335,9 @@ def mktemp(path):
 	'''Helper function to return tmp fhandle and callback to move it into a given place'''
 	tmp_path, tmp = os.path.split(path)
 	tmp_path = mkstemp(prefix=tmp+os.extsep, dir=tmp_path)[1]
-	commit = lambda: mv(tmp_path, path)
+	def commit():
+		cp_cat(tmp_path, path)
+		rm(tmp_path, onerror=False)
 	return open(tmp_path, 'w'), commit
 
 
@@ -388,9 +390,9 @@ class flock(object):
 						sleep(interval)
 				else: raise LockError('Unable to acquire lock: %s'%self._lock)
 	def release(self):
-		if self.locked:
-			fcntl.flock(self._lock, fcntl.LOCK_UN)
-			self.locked = False
+		if self.locked: self.locked = False
+		try: fcntl.flock(self._lock, fcntl.LOCK_UN)
+		except AttributeError: pass
 		return self
 	def __del__(self):
 		self.release()
