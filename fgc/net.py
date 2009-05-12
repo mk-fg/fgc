@@ -1,4 +1,4 @@
-from ftplib import FTP, print_line, _GLOBAL_DEFAULT_TIMEOUT, CRLF
+from ftplib import FTP, print_line, _GLOBAL_DEFAULT_TIMEOUT, CRLF, Error
 import ssl
 
 class FTP_TLS(FTP, object):
@@ -36,15 +36,14 @@ class FTP_TLS(FTP, object):
 	'''
 
 	def __init__(self, host='', user='', passwd='', acct='', keyfile=None,
-				 certfile=None, timeout=_GLOBAL_DEFAULT_TIMEOUT):
+			certfile=None, timeout=_GLOBAL_DEFAULT_TIMEOUT):
 		self.keyfile = keyfile
 		self.certfile = certfile
 		self._prot_p = False
 		FTP.__init__(self, host, user, passwd, acct, timeout)
 
 	def login(self, user='', passwd='', acct='', secure=True):
-		if secure:
-			self.auth_tls()
+		if secure: self.auth_tls()
 		FTP.login(self, user, passwd, acct)
 
 	def auth_tls(self):
@@ -81,21 +80,18 @@ class FTP_TLS(FTP, object):
 	def ntransfercmd(self, cmd, rest=None):
 		conn, size = FTP.ntransfercmd(self, cmd, rest)
 		if self._prot_p:
-			conn = ssl.wrap_socket(conn, self.keyfile, self.certfile,
-									 ssl_version=ssl.PROTOCOL_TLSv1)
+			conn = ssl.wrap_socket(conn, self.keyfile, self.certfile, ssl_version=ssl.PROTOCOL_TLSv1)
 		return conn, size
 
 	def retrbinary(self, cmd, callback, blocksize=8192, rest=None):
 		self.voidcmd('TYPE I')
 		conn = self.transfercmd(cmd, rest)
-		while 1:
+		while True:
 			data = conn.recv(blocksize)
-			if not data:
-				break
+			if not data: break
 			callback(data)
 		# shutdown ssl layer
-		if isinstance(conn, ssl.SSLSocket):
-			conn.unwrap()
+		if isinstance(conn, ssl.SSLSocket): conn.unwrap()
 		conn.close()
 		return self.voidresp()
 
@@ -104,19 +100,15 @@ class FTP_TLS(FTP, object):
 		resp = self.sendcmd('TYPE A')
 		conn = self.transfercmd(cmd)
 		fp = conn.makefile('rb')
-		while 1:
+		while True:
 			line = fp.readline()
 			if self.debugging > 2: print '*retr*', repr(line)
-			if not line:
-				break
-			if line[-2:] == CRLF:
-				line = line[:-2]
-			elif line[-1:] == '\n':
-				line = line[:-1]
+			if not line: break
+			if line[-2:] == CRLF: line = line[:-2]
+			elif line[-1:] == '\n': line = line[:-1]
 			callback(line)
 		# shutdown ssl layer
-		if isinstance(conn, ssl.SSLSocket):
-			conn.unwrap()
+		if isinstance(conn, ssl.SSLSocket): conn.unwrap()
 		fp.close()
 		conn.close()
 		return self.voidresp()
@@ -124,21 +116,20 @@ class FTP_TLS(FTP, object):
 	def storbinary(self, cmd, fp, blocksize=8192, callback=None):
 		self.voidcmd('TYPE I')
 		conn = self.transfercmd(cmd)
-		while 1:
+		while True:
 			buf = fp.read(blocksize)
 			if not buf: break
 			conn.sendall(buf)
 			if callback: callback(buf)
 		# shutdown ssl layer
-		if isinstance(conn, ssl.SSLSocket):
-			conn.unwrap()
+		if isinstance(conn, ssl.SSLSocket): conn.unwrap()
 		conn.close()
 		return self.voidresp()
 
 	def storlines(self, cmd, fp, callback=None):
 		self.voidcmd('TYPE A')
 		conn = self.transfercmd(cmd)
-		while 1:
+		while True:
 			buf = fp.readline()
 			if not buf: break
 			if buf[-2:] != CRLF:
@@ -147,8 +138,14 @@ class FTP_TLS(FTP, object):
 			conn.sendall(buf)
 			if callback: callback(buf)
 		# shutdown ssl layer
-		if isinstance(conn, ssl.SSLSocket):
-			conn.unwrap()
+		if isinstance(conn, ssl.SSLSocket): conn.unwrap()
 		conn.close()
 		return self.voidresp()
 
+	# --- Extensions
+
+	def sever(self):
+		try: self.quit()
+		except Error as ex:
+			try: self.close()
+			except: pass
