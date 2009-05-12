@@ -28,7 +28,7 @@ class GitCfg(ConfigParser, file):
 	def write(self, data): raise NotImplementedError('Write to gitconfig is not implemented yet')
 
 
-def update_idx(): exe.add((cfg.bin.git, 'update-index', '--refresh'))
+def update_idx(): exe.add((cfg.bin.git, 'update-index', '--refresh'), block=True)
 
 
 def merge():
@@ -85,7 +85,6 @@ def exc(*argz, **kwz):
 
 def perm_gen():
 	'''Permissions' information file ('path uid:gid\n' format) generator'''
-	pre_exists = os.path.isfile(cfg.ownage.file)
 	numeric = cfg.ownage.use_ids
 	if cfg.ownage.omit: return log.warn('Omit permissions flag is set, skipping FS metadata changes')
 	ownage = {}
