@@ -53,5 +53,12 @@ def overlap(*argz):
 		if argz: yield val # every arg could be depleted
 
 
+def fchain(*procz):
+	def process(data):
+		for proc in procz: data = proc(data)
+		return data
+	return process
+
+
 import string, random
 def uid(len=8, charz=string.hexdigits): return ''.join(random.sample(''.join(charz), len))

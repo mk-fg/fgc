@@ -316,7 +316,7 @@ def glob(pattern):
 		if not ex: break
 		subs.append(ex.group(0)[1:-1].split(','))
 		pattern = pattern[:ex.span()[0]] + '%s' + pattern[ex.span()[1]:]
-	return it.chain.from_iterable( iglob(pattern%combo) for combo in product(*subs) ) if subs else (pattern,)
+	return it.chain.from_iterable( iglob(pattern%combo) for combo in product(*subs) ) if subs else iglob(pattern)
 
 
 def df(path):
