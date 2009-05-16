@@ -1,1 +1,2 @@
-echo = getattr(__builtins__, 'print') # works w/o __future__ import in py2.6
+from __future__ import print_function
+echo = print

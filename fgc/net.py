@@ -1,5 +1,5 @@
 from ftplib import FTP, print_line, _GLOBAL_DEFAULT_TIMEOUT, CRLF, Error
-import ssl
+import ssl, collections
 
 class FTP_TLS(FTP, object):
 	'''A FTP subclass which adds TLS support to FTP as described
@@ -83,60 +83,67 @@ class FTP_TLS(FTP, object):
 			conn = ssl.wrap_socket(conn, self.keyfile, self.certfile, ssl_version=ssl.PROTOCOL_TLSv1)
 		return conn, size
 
-	def retrbinary(self, cmd, callback, blocksize=8192, rest=None):
+	def retrbinary(self, cmd, bs=8192, rest=None, cb_in=None, cb_out=None):
 		self.voidcmd('TYPE I')
 		conn = self.transfercmd(cmd, rest)
 		while True:
-			data = conn.recv(blocksize)
+			data = conn.recv(bs)
+			cb_in(data)
 			if not data: break
-			callback(data)
+			cb_out(data)
 		# shutdown ssl layer
 		if isinstance(conn, ssl.SSLSocket): conn.unwrap()
 		conn.close()
 		return self.voidresp()
 
-	def retrlines(self, cmd, callback = None):
-		if callback is None: callback = print_line
+	def retrlines(self, cmd, cb_in=None, cb_out=None):
+		if cb_out is None: cb_out = print_line
 		resp = self.sendcmd('TYPE A')
 		conn = self.transfercmd(cmd)
 		fp = conn.makefile('rb')
 		while True:
-			line = fp.readline()
-			if self.debugging > 2: print '*retr*', repr(line)
-			if not line: break
-			if line[-2:] == CRLF: line = line[:-2]
-			elif line[-1:] == '\n': line = line[:-1]
-			callback(line)
+			buff = fp.readline()
+			if cb_in: cb_in(buff)
+			if self.debugging > 2: print '*retr*', repr(buff)
+			if not buff: break
+			if buff[-2:] == CRLF: buff = buff[:-2]
+			elif buff[-1:] == '\n': buff = buff[:-1]
+			if cb_out: cb_out(buff)
 		# shutdown ssl layer
 		if isinstance(conn, ssl.SSLSocket): conn.unwrap()
 		fp.close()
 		conn.close()
 		return self.voidresp()
 
-	def storbinary(self, cmd, fp, blocksize=8192, callback=None):
+	def storbinary(self, cmd, src, bs=8192, cb_in=None, cb_out=None):
 		self.voidcmd('TYPE I')
 		conn = self.transfercmd(cmd)
+		if isinstance(src, collections.Iterator): src = src.next
+		elif isinstance(src, collections.Callable): pass
+		else: src = ft.partial(src.read, bs)
 		while True:
-			buf = fp.read(blocksize)
-			if not buf: break
-			conn.sendall(buf)
-			if callback: callback(buf)
+			buff = src()
+			if cb_in: cb_in(buff)
+			if not buff: break
+			conn.sendall(buff)
+			if cb_out: cb_out(buff)
 		# shutdown ssl layer
 		if isinstance(conn, ssl.SSLSocket): conn.unwrap()
 		conn.close()
 		return self.voidresp()
 
-	def storlines(self, cmd, fp, callback=None):
+	def storlines(self, cmd, fp, cb_in=None, cb_out=None):
 		self.voidcmd('TYPE A')
 		conn = self.transfercmd(cmd)
 		while True:
-			buf = fp.readline()
-			if not buf: break
-			if buf[-2:] != CRLF:
-				if buf[-1] in CRLF: buf = buf[:-1]
-				buf = buf + CRLF
-			conn.sendall(buf)
-			if callback: callback(buf)
+			buff = fp.readline()
+			if cb_in: cb_in(buff)
+			if not buff: break
+			if buff[-2:] != CRLF:
+				if buff[-1] in CRLF: buff = buff[:-1]
+				buff = buff + CRLF
+			conn.sendall(buff)
+			if cb_out: cb_out(buff)
 		# shutdown ssl layer
 		if isinstance(conn, ssl.SSLSocket): conn.unwrap()
 		conn.close()

@@ -61,4 +61,9 @@ def fchain(*procz):
 
 
 import string, random
-def uid(len=8, charz=string.hexdigits): return ''.join(random.sample(''.join(charz), len))
+def uid(len=8, charz=string.hexdigits):
+	buff = buffer('')
+	while len:
+		buff += random.choice(charz)
+		len -= 1
+	return buff
