@@ -56,7 +56,7 @@ def merge():
 			for rel in sh.glob( os.path.join(os.path.dirname(file), '._upd??_'+os.path.basename(file)) )
 		]
 	for line in git.stderr: log.error(line)
-	if updates: return exe.add("%s -- '%s'"%(cfg.bin.decay, "' '".join(updates)), sys=True)
+	if updates: return exe.add(tuple(data.chain(cfg.bin.decay, '--', updates)), sys=True)
 
 
 def clone():
