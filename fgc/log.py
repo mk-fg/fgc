@@ -53,9 +53,9 @@ def _add_handlers(log, kwz):
 		for stream in key:
 			handler = logging.StreamHandler(stream)
 			format = []
-			if kwz.has_key('format'):
+			if 'format' in kwz:
 				format.append(kwz['format'])
-				if kwz.has_key('datefmt'): format.append(kwz['datefmt'])
+				if 'datefmt' in kwz: format.append(kwz['datefmt'])
 			if format: handler.setFormatter(logging.Formatter(*format))
 			log.addHandler(handler)
 
@@ -65,13 +65,17 @@ def cfg(*argz, **kwz):
 	try: key = kwz.pop('err_threshold')
 	except KeyError: pass
 	else: ls._errl = key
-	_add_handlers(ls, kwz)
-	kwz_ext = {
+	kwz_ext = { # default format
 		'format': '%(asctime)s %(levelname)s %(module)s.%(funcName)s: %(message)s',
 		'datefmt': '(%d.%m.%y %H:%M:%S)'
 	}
-	kwz_ext.update(kwz)
-	return logging.basicConfig(*argz, **kwz_ext)
+	try:
+		if kwz['format'] is True: kwz.update(kwz_ext) # use default for a given streams as well
+	except: kwz_ext.update(kwz)
+	_add_handlers(ls, kwz)
+	logging.basicConfig(*argz, **kwz_ext)
+	try: ls.setLevel(kwz['level'])
+	except: pass
 
 def extra(*argz, **kwz):
 	'''Add extra logging stream'''

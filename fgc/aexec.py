@@ -1,15 +1,14 @@
-from subprocess import Popen, PIPE
-from threading import Thread, BoundedSemaphore
 import itertools as it, operator as op, functools as ft
+from threading import Thread, BoundedSemaphore
 import os, sys, Queue
 
 
 class Threader(object):
 	def __init__(self, process=1, results=None, timeout=5):
 		self._threads = list()
-		self._threads_limit = process
+		self._threads_limit = process if process > 0 else None
 		if isinstance(results, int):
-			results -= process
+			if self._threads_limit: results -= process
 			if results <= 0: raise ValueError('Results limit must be higher than processing limit')
 			self._results = Queue.Queue(results)
 		elif results is None: self._results = Queue.Queue()
@@ -34,7 +33,7 @@ class Threader(object):
 		try: return self._results.get(*argz, **kwz) # so get can be overridden in results
 		except Queue.Empty: self.close(True) # for standard results queue, in case of timeout
 	def put(self, task):
-		if len(self._threads) < self._threads_limit:
+		if not self._threads_limit or len(self._threads) < self._threads_limit:
 			thread = Thread(target=self._worker)
 			thread.setDaemon(True)
 			thread.start()
@@ -62,6 +61,7 @@ class Threader(object):
 
 
 
+from subprocess import Popen, PIPE
 from select import epoll, EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP
 import errno, fcntl
 from time import time
@@ -149,7 +149,7 @@ class AWrapper(object):
 					break
 				to = deadline - time()
 				if to < 0:
-					if report: state = Time
+					if state: state = Time
 					break
 				buff = buffer(buff, ext)
 		finally:
@@ -191,15 +191,23 @@ class AExec(Popen):
 				else: # trigger it immediately
 					signal.alarm(0)
 					os.kill(os.getpid(), signal.SIGALRM)
+			else: signal.alarm(0)
 		else: status = super(AExec, self).wait()
 		return status
 
-	def close(self, to=-1):
+	def close(self, to=-1, to_sever=3):
 		try:
-			self.terminate()
+			if self.stdin: # try to strangle it
+				try: self.stdin.close()
+				except: pass
+				if to_sever and to > to_sever: # wait for process to die on it's own
+					status = self.wait(to_sever)
+					if not status is Time: return status
+					else: to -= to_sever
+			self.terminate() # soft-kill
 			status = self.wait(to)
-			if status is None:
-				self.kill()
+			if status is Time:
+				self.kill() # hard-kill
 				return Time
-		except: return None
+		except: return None # already taken care of
 	__del__ = close

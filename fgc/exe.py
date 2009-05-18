@@ -1,5 +1,5 @@
 from aexec import AExec, Threader, PIPE, Time, Size, End
-import os, sys
+import os, sys, signal
 
 
 queue = []
@@ -59,7 +59,12 @@ def add(*argz, **kwz): # aka 'schedule task'
 	try: cb = kwz.pop('callback')
 	except KeyError: # no callback given
 		if not block: queue.append(proc(*argz, **kwz))
-		else: return proc(*argz, **kwz).wait()
+		else:
+			ps = proc(*argz, **kwz)
+			try: return ps.wait()
+			except KeyboardInterrupt, ex:
+				os.kill(ps.pid, signal.SIGINT)
+				ps.wait() # second SIGINT will kill python
 	else: # valid callback
 		if not block: queue.append((proc(*argz, **kwz), cb))
 		else:

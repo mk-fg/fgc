@@ -122,7 +122,8 @@ class FTP_TLS(FTP, object):
 		elif isinstance(src, collections.Callable): pass
 		else: src = ft.partial(src.read, bs)
 		while True:
-			buff = src()
+			try: buff = src()
+			except StopIteration: buff = ''
 			if cb_in: cb_in(buff)
 			if not buff: break
 			conn.sendall(buff)
