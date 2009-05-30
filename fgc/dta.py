@@ -60,6 +60,18 @@ def fchain(*procz):
 	return process
 
 
+import itertools as it
+dmap = lambda idict,key=None,val=None: ( (key and key(k) or k, val and val(v) or v) for k,v in idict )
+
+
+def coroutine(func):
+	def start(*argz, **kwz):
+		cr = func(*argz, **kwz)
+		cr.next()
+		return cr
+	return start
+
+
 import string, random
 def uid(len=8, charz=string.hexdigits):
 	buff = buffer('')

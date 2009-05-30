@@ -87,8 +87,8 @@ class FTP_TLS(FTP, object):
 		self.voidcmd('TYPE I')
 		conn = self.transfercmd(cmd, rest)
 		while True:
+			cb_in(None)
 			data = conn.recv(bs)
-			cb_in(data)
 			if not data: break
 			cb_out(data)
 		# shutdown ssl layer
@@ -102,8 +102,8 @@ class FTP_TLS(FTP, object):
 		conn = self.transfercmd(cmd)
 		fp = conn.makefile('rb')
 		while True:
+			if cb_in: cb_in(None)
 			buff = fp.readline()
-			if cb_in: cb_in(buff)
 			if self.debugging > 2: print '*retr*', repr(buff)
 			if not buff: break
 			if buff[-2:] == CRLF: buff = buff[:-2]
