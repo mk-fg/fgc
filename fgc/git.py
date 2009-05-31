@@ -5,12 +5,13 @@ import os, sys, re
 
 
 # Swallow '--config-dir' parameter, if any
+cfgit = open('/etc/cfgit').read().strip(spaces)
 try:
 	arg_idx = sys.argv.index('--config-dir')
 	del sys.argv[arg_idx]
 	cfg_dir = sys.argv[arg_idx]
 	del sys.argv[arg_idx], arg_idx
-except (IndexError, ValueError): cfg_dir = '/.cFG/cfgit'
+except (IndexError, ValueError): cfg_dir = os.path.join(cfgit, 'cfgit')
 # Read cfg or die
 try: cfg = dta.do(os.path.join(cfg_dir, 'config.yaml'))
 except Exception as ex: log.fatal('Configuration error: %s'%ex, crash=1)
@@ -71,8 +72,9 @@ def clone():
 
 
 def ls_files(sort=True):
-	files = exc((cfg.bin.git, 'ls-files', '--full-name'),
-		stdout=exe.PIPE, stderr=sys.stderr).stdout.readlines()
+	files = None
+	while not files: # aw, fuck it! (dirty hack for nasty bug)
+		files = exe.pipe((cfg.bin.git, 'ls-files', '--full-name')).stdout.readlines()
 	return sorted(files) if sort else files
 
 
@@ -135,7 +137,10 @@ def perm_apply():
 		try: uid, gid, mode = ownage.split(':', 2)
 		except ValueError: uid, gid = ownage.split(':', 1) # Deprecated format w/o mode
 		try:
-			os.lchown(path, sh.uid(uid), sh.gid(gid))
+			try: os.lchown(path, sh.uid(uid), sh.gid(gid))
+			except KeyError:
+				log.error('No such id - %s:%s (%s)'%(uid,gid,path))
+				errz = True
 			try: os.lchmod(path, int(mode, 8)) # py2.6+ only
 			except AttributeError:
 				if not os.path.islink(path): os.chmod(path, int(mode, 8))
