@@ -77,11 +77,9 @@ class AWrapper(object):
 	bs_default = 8192
 	bs_max = 65536
 
-	def __init__(self, pipe):
-		if isinstance(pipe, int):
-			fd = self._fd = pipe
-			pipe = os.fromfd(pipe)
-		else: fd = self._fd = pipe.fileno()
+	def __init__(self, pipe, leash=None):
+		fd = self._fd = pipe.fileno()
+		if leash: self.__leash = leash # fd source object, leashed here to stop gc
 		self._poll_in, self._poll_out = epoll(), epoll()
 		self._poll_in.register(fd, EPOLLIN | EPOLLERR | EPOLLHUP)
 		self._poll_out.register(fd, EPOLLOUT | EPOLLERR | EPOLLHUP)
@@ -158,6 +156,12 @@ class AWrapper(object):
 		return bs if not state else (bs, state)
 
 
+class FileBridge(object):
+	def __init__(self, src, leash):
+		self.__src = os.fdopen(src.fileno(), src.mode)
+		self.__leash = (src, leash)
+	__getattr__ = lambda s,k: getattr(s.__src,k)
+
 
 import signal
 
@@ -166,15 +170,17 @@ class AExec(Popen):
 		if len(argz) == 1: argz = (argz[0],) if isinstance(argz[0], (str, unicode, buffer)) else argz[0]
 		try: sync = kwz.pop('sync')
 		except KeyError: sync = True
-		super(AExec, self).__init__(argz, **kwz)
+		super(AExec, self).__init__(argz, **kwz) # argz aren't expanded on purpose!
+		# FileBridge is necessary to stop gc from destroying other side of fd's by collecting this object
+		bridge = AWrapper if not sync else FileBridge
 		if self.stdin:
-			if not sync: self.stdin = AWrapper(self.stdin)
+			self.stdin = bridge(self.stdin, self)
 			self.write = self.stdin.write
 		if self.stdout:
-			if not sync: self.stdout = AWrapper(self.stdout)
+			self.stdout = bridge(self.stdout, self)
 			self.read = self.stdout.read
 		if self.stderr:
-			if not sync: self.stderr = AWrapper(self.stderr)
+			self.stderr = bridge(self.stderr, self)
 			self.read_err = self.stderr.read
 
 	def wait(self, to=-1):

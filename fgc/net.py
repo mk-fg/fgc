@@ -83,39 +83,37 @@ class FTP_TLS(FTP, object):
 			conn = ssl.wrap_socket(conn, self.keyfile, self.certfile, ssl_version=ssl.PROTOCOL_TLSv1)
 		return conn, size
 
-	def retrbinary(self, cmd, bs=8192, rest=None, cb_in=None, cb_out=None):
+	def retrbinary(self, cmd, bs=8192, rest=None, callback=None):
 		self.voidcmd('TYPE I')
 		conn = self.transfercmd(cmd, rest)
 		while True:
-			cb_in(None)
 			data = conn.recv(bs)
 			if not data: break
-			cb_out(data)
+			if callback: callback(data)
 		# shutdown ssl layer
 		if isinstance(conn, ssl.SSLSocket): conn.unwrap()
 		conn.close()
 		return self.voidresp()
 
-	def retrlines(self, cmd, cb_in=None, cb_out=None):
-		if cb_out is None: cb_out = print_line
+	def retrlines(self, cmd, callback=None):
+		if callback is None: callback = print_line
 		resp = self.sendcmd('TYPE A')
 		conn = self.transfercmd(cmd)
 		fp = conn.makefile('rb')
 		while True:
-			if cb_in: cb_in(None)
 			buff = fp.readline()
 			if self.debugging > 2: print '*retr*', repr(buff)
 			if not buff: break
 			if buff[-2:] == CRLF: buff = buff[:-2]
 			elif buff[-1:] == '\n': buff = buff[:-1]
-			if cb_out: cb_out(buff)
+			if callback: callback(buff)
 		# shutdown ssl layer
 		if isinstance(conn, ssl.SSLSocket): conn.unwrap()
 		fp.close()
 		conn.close()
 		return self.voidresp()
 
-	def storbinary(self, cmd, src, bs=8192, cb_in=None, cb_out=None):
+	def storbinary(self, cmd, src, bs=8192, callback=None):
 		self.voidcmd('TYPE I')
 		conn = self.transfercmd(cmd)
 		if isinstance(src, collections.Iterator): src = src.next
@@ -124,27 +122,25 @@ class FTP_TLS(FTP, object):
 		while True:
 			try: buff = src()
 			except StopIteration: buff = ''
-			if cb_in: cb_in(buff)
 			if not buff: break
 			conn.sendall(buff)
-			if cb_out: cb_out(buff)
+			if callback: callback(buff)
 		# shutdown ssl layer
 		if isinstance(conn, ssl.SSLSocket): conn.unwrap()
 		conn.close()
 		return self.voidresp()
 
-	def storlines(self, cmd, fp, cb_in=None, cb_out=None):
+	def storlines(self, cmd, fp, callback=None):
 		self.voidcmd('TYPE A')
 		conn = self.transfercmd(cmd)
 		while True:
 			buff = fp.readline()
-			if cb_in: cb_in(buff)
 			if not buff: break
 			if buff[-2:] != CRLF:
 				if buff[-1] in CRLF: buff = buff[:-1]
 				buff = buff + CRLF
 			conn.sendall(buff)
-			if cb_out: cb_out(buff)
+			if callback: callback(buff)
 		# shutdown ssl layer
 		if isinstance(conn, ssl.SSLSocket): conn.unwrap()
 		conn.close()

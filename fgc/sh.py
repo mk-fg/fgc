@@ -6,7 +6,6 @@ Optimized and simplified a lot, since original implementation was rubbish.
 '''
 
 import os, sys, stat, re, pwd, grp
-from os.path import abspath
 from fgc import log
 
 
@@ -68,7 +67,7 @@ def chmod(path, mode, deference=True):
 	else: os.lchmod(path, mode)
 
 
-def cat(fsrc, fdst, length=16*1024, recode=None):
+def cat(fsrc, fdst, length=16*1024, recode=None, sync=False):
 	'''copy data from file-like object fsrc to file-like object fdst'''
 	while 1:
 		buf = fsrc.read(length)
@@ -77,6 +76,7 @@ def cat(fsrc, fdst, length=16*1024, recode=None):
 			from fgc.enc import recode as rec
 			rec(fsrc, fdst, recode)
 		else: fdst.write(buf)
+	if sync: fdst.flush()
 
 
 def _cmp(src, dst):
@@ -88,7 +88,7 @@ def _cmp(src, dst):
 			os.path.normcase(os.path.abspath(dst)))
 
 
-def cp_cat(src, dst, recode=None, append=False):
+def cp_cat(src, dst, recode=None, append=False, sync=False):
 	'''Copy data from src to dst'''
 	if _cmp(src, dst): raise Error, "'%s' and '%s' are the same file" %(src,dst)
 	fsrc = None
@@ -96,7 +96,7 @@ def cp_cat(src, dst, recode=None, append=False):
 	try:
 		fsrc = open(src, 'rb')
 		fdst = open(dst, 'wb' if not append else 'ab')
-		cat(fsrc, fdst, recode=recode)
+		cat(fsrc, fdst, recode=recode, sync=sync)
 	except IOError, err: raise Error, str(err)
 	finally:
 		if fdst: fdst.close()
@@ -267,7 +267,7 @@ def crawl(top, filter=None, exclude=None, dirs=True, topdown=True, onerror=False
 				else:
 					if onerror: onerror(crawl, path, sys.exc_info())
 					continue
-			yield os.path.join(root, name)
+			yield path
 
 
 def touch(path, mode=0644, uid=None, gid=None):
@@ -335,10 +335,18 @@ def mktemp(path):
 	'''Helper function to return tmp fhandle and callback to move it into a given place'''
 	tmp_path, tmp = os.path.split(path)
 	tmp_path = mkstemp(prefix=tmp+os.extsep, dir=tmp_path)[1]
-	def commit():
-		cp_cat(tmp_path, path)
+	tmp = open(tmp_path, 'wb+')
+	def commit(sync=False):
+		try: tmp.flush() # to ensure that next read gets all data
+		except ValueError: cp_cat(tmp_path, path, sync=sync) # tmp was closed already
+		else:
+			tmp.seek(0)
+			with open(path, 'w') as src:
+				cat(tmp, src)
+				if sync: src.flush()
+			tmp.close()
 		rm(tmp_path, onerror=False)
-	return open(tmp_path, 'w'), commit
+	return tmp, commit
 
 
 
@@ -350,7 +358,11 @@ class LockError(EnvironmentError):
 
 class flock(object):
 	'''Filesystem lock'''
-	__slots__ = ('locked', '_lock', '_type', '_del')
+	__slots__ = ('locked', '_lock', '_shared', '_del')
+
+	@property
+	def _type(self): return fcntl.LOCK_EX if not self._shared else fcntl.LOCK_SH
+
 	def __init__(self, path, make=False, shared=False, remove=None):
 		self.locked = self._del = False
 		if remove == None: remove = make
@@ -361,11 +373,12 @@ class flock(object):
 				self._lock = open(path)
 			else: raise Error, err
 		if remove: self._del = path
-		self._type = fcntl.LOCK_EX if not shared else fcntl.LOCK_SH
+		self._shared = shared
+
 	def check(self, grab=False):
 		if self.locked: return self.locked
-		try: fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-		except IOError as ex:
+		try: fcntl.flock(self._lock, self._type | fcntl.LOCK_NB)
+		except IOError, ex:
 			if not grab: return False
 			else: return None # checked internally
 		else:
@@ -373,30 +386,35 @@ class flock(object):
 			else:
 				fcntl.flock(self._lock, fcntl.LOCK_UN)
 				return False
-	def acquire(self, timeout=None, interval=5):
-		if not self.locked:
+
+	def acquire(self, timeout=None, interval=5, shared=None):
+		if not self.locked and shared != self._shared:
+			if not shared is None: self._shared = shared # update lock type for all future calls as well
 			if not timeout:
-				fcntl.flock(self._lock, fcntl.LOCK_EX)
+				fcntl.flock(self._lock, self._type)
 				self.locked = True
-				return self
 			else:
 				for attempt in xrange(0, timeout, interval):
 					attempt = self.check(True)
 					if attempt:
 						self.locked = True
-						return self
+						break
 					else:
 						log.debug('Waiting for lock: %s'%self._lock)
 						sleep(interval)
 				else: raise LockError('Unable to acquire lock: %s'%self._lock)
+		return self
+
 	def release(self):
-		if self.locked: self.locked = False
 		try: fcntl.flock(self._lock, fcntl.LOCK_UN)
 		except AttributeError: pass
+		self.locked = False
 		return self
+
 	def __del__(self):
 		self.release()
 		if self._del: rm(self._del)
+
 	__str__ = __repr__ = lambda s: '<FileLock %s>'%s._lock
 	def __enter__(self): return self.acquire()
 	def __exit__(self, ex_type, ex_val, ex_trace): self.release()

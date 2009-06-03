@@ -80,18 +80,6 @@ def pipe(*argz, **kwz):
 	nkwz = dict(stdin=PIPE, stdout=PIPE, stderr=PIPE)
 	nkwz.update(kwz)
 	return proc(*argz, **nkwz)
-def pin(*argz, **kwz): # pipe.stdout or "gzip < file |", if single str is given
-	if not argz or not isinstance(argz[0], (tuple, list)):
-		from fgc.config import cfg
-		if argz: kwz['stdin'] = open(argz[0], 'rb') if isinstance(argz[0], str) else argz[0]
-		argz = ([os.path.join(cfg.paths.bin, 'gzip'), '-d'],)
-	return pipe(*argz, **kwz).stdout
-def pout(*argz, **kwz): # pipe.stdin or "| gzip > file", if single str is given
-	if not argz or not isinstance(argz[0], (tuple, list)):
-		from fgc.config import cfg
-		if argz: kwz['stdout'] = open(argz[0], 'wb') if isinstance(argz[0], str) else argz[0]
-		argz = ([os.path.join(cfg.paths.bin, 'gzip')],)
-	return pipe(*argz, **kwz).stdin
 
 
 def wait(n=-1):
