@@ -59,9 +59,12 @@ def mode(mode):
 		raise Error, 'Unrecognized file system mode format: %s'%mode
 
 
-def chown(path, uid=-1, gid=-1, deference=True):
-	if deference: os.chown(path, uid, gid)
-	else: os.lchown(path, uid, gid)
+def chown(path, tuid=-1, tgid=-1, deference=True, resolve=False):
+	if resolve:
+		if tuid != -1 and ':' in tuid: tuid, tgid = tuid.split(':')
+		tuid, tgid = uid(tuid), gid(tgid)
+	if deference: os.chown(path, tuid, tgid)
+	else: os.lchown(path, tuid, tgid)
 def chmod(path, mode, deference=True):
 	if deference: os.chmod(path, mode)
 	else: os.lchmod(path, mode)
@@ -129,6 +132,7 @@ def cp_stat(src, dst, attrz=False, deference=True):
 	if attrz:
 		if deference: os.utime(dst, (st.st_atime, st.st_mtime))
 		chown(dst, st.st_uid, st.st_gid)
+	return st
 
 
 cp_p = lambda src,dst: cp(src, dst, attrz=True)
@@ -153,7 +157,7 @@ def cp_r(src, dst, symlinks=False, attrz=False, skip=[], onerror=None, atom=cp_d
 
 	The destination directory must not already exist.
 	If exception(s) occur, an Error is raised with a list of reasons.
-	If onerror is passed, it'll be called on every raised exception.
+	If onerror is passed, itll be called on every raised exception.
 	'skip' pattern(s) will be skipped.
 
 	If the optional symlinks flag is true, symbolic links in the
@@ -189,7 +193,7 @@ def rm(path, onerror=None):
 	Remove path.
 
 	If exception(s) occur, an Error is raised with original error.
-	If onerror is passed, it'll be called on exception.
+	If onerror is passed, itll be called on exception.
 	'''
 	try: mode = os.lstat(path).st_mode
 	except OSError: mode = 0
@@ -206,7 +210,7 @@ def rr(path, onerror=None, preserve=[], keep_root=False):
 	Recursively remove path.
 
 	If exception(s) occur, an Error is raised with original error.
-	If onerror is passed, it'll be called on every raised exception.
+	If onerror is passed, itll be called on every raised exception.
 	'preserve' pattern(s) will be skipped.
 
 	Also includes original path preservation flag.
@@ -330,24 +334,72 @@ def df(path):
 	return (df.f_blocks * df.f_bsize, df.f_bavail * df.f_bsize)
 
 
+from dta import chain
+from collections import deque
+
+class GC:
+	'''Garbage Collector object
+		Works with:
+			callable - run
+			iterable - recurse to each element
+			file - close
+			string - rm path'''
+	# TODO: Add weakref option
+	__slots__ = ()
+	__actz = deque()
+	def __init__(self, *actz):
+		for act in chain(actz): self.__actz.append(act)
+	def __del__(self):
+		while self.__actz:
+			act = self.__actz.popleft() # destroys reference to object
+			try: act() # isinstance of Callable check fails here w/ some weird error
+			except TypeError: pass
+			else: continue
+			if isinstance(act, file): act.close()
+			elif isinstance(act, (str, unicode)): rm(act, onerror=False)
+			else: log.warn('Unknown garbage type: %r'%act)
+	def add(self, *actz): self.__actz.extend(actz)
+_gc = GC()
+
+def gc(*argz): return _gc.add(*argz)
+
+
 from tempfile import mkstemp
 def mktemp(path):
 	'''Helper function to return tmp fhandle and callback to move it into a given place'''
 	tmp_path, tmp = os.path.split(path)
 	tmp_path = mkstemp(prefix=tmp+os.extsep, dir=tmp_path)[1]
 	tmp = open(tmp_path, 'wb+')
-	def commit(sync=False):
+	gc(tmp, tmp_path) # to collect leftover
+	def commit(sync=False, atomic=False):
+		tmp_sync, dst_path = False, path # localize vars
 		try: tmp.flush() # to ensure that next read gets all data
-		except ValueError: cp_cat(tmp_path, path, sync=sync) # tmp was closed already
-		else:
+		except ValueError:
+			if not atomic:
+				cp_cat(tmp_path, dst_path, sync=sync) # tmp was closed already
+				tmp_sync = True # to indicate that we're done with it
+		if atomic:
+			tmp.close()
+			st = cp_stat(dst_path, tmp_path, attrz=True, deference=True)
+			if stat.S_ISLNK(st): dst_path = os.path.readlink(path)
+			mv(tmp_path, dst_path) # atomic for same fs, a bit dirty otherwise
+		elif not tmp_sync: # file is still opened
 			tmp.seek(0)
-			with open(path, 'w') as src:
+			with open(dst_path, 'w') as src:
 				cat(tmp, src)
 				if sync: src.flush()
 			tmp.close()
 		rm(tmp_path, onerror=False)
 	return tmp, commit
 
+
+from zlib import crc32
+def crc32(stream, bs=8192):
+	cs = crc32('')
+	while block:
+		block = stream.read(bs)
+		cs = cs(block, cs)
+	return cs
 
 
 from time import sleep
@@ -382,12 +434,14 @@ class flock(object):
 			if not grab: return False
 			else: return None # checked internally
 		else:
-			if grab: return self
+			if grab:
+				self.locked = True
+				return self
 			else:
 				fcntl.flock(self._lock, fcntl.LOCK_UN)
 				return False
 
-	def acquire(self, timeout=None, interval=5, shared=None):
+	def acquire(self, timeout=False, interval=5, shared=None):
 		if not self.locked and shared != self._shared:
 			if not shared is None: self._shared = shared # update lock type for all future calls as well
 			if not timeout:
@@ -396,9 +450,7 @@ class flock(object):
 			else:
 				for attempt in xrange(0, timeout, interval):
 					attempt = self.check(True)
-					if attempt:
-						self.locked = True
-						break
+					if attempt: break
 					else:
 						log.debug('Waiting for lock: %s'%self._lock)
 						sleep(interval)
@@ -407,14 +459,33 @@ class flock(object):
 
 	def release(self):
 		try: fcntl.flock(self._lock, fcntl.LOCK_UN)
-		except AttributeError: pass
+		except: pass
 		self.locked = False
 		return self
 
 	def __del__(self):
 		self.release()
-		if self._del: rm(self._del)
+		if self._del: rm(self._del, onerror=False)
 
-	__str__ = __repr__ = lambda s: '<FileLock %s>'%s._lock
+	__str__ = __repr__ = __hash__ = lambda s: '<FileLock %s>'%s._lock
 	def __enter__(self): return self.acquire()
 	def __exit__(self, ex_type, ex_val, ex_trace): self.release()
+
+
+from time import time
+def multi_lock(*paths, **kwz):
+	locks = list()
+	timeout = kwz.get(timeout)
+	deadline = time() + timeout if timeout else None
+	while True:
+		for path in paths:
+			lock = flock(path).check(grab=True)
+			if not lock: break
+			else: locks.append(lock)
+		else: break
+		for lock in locks: lock.release()
+		if deadline and time() < deadline:
+			raise LockError('Unable to acquire locks: %s'%', '.join(locks))
+		sleep(min(5, deadline-time() if deadline else 5))
+	return locks
+
