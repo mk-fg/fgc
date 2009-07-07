@@ -6,7 +6,7 @@ Optimized and simplified a lot, since original implementation was rubbish.
 '''
 
 import os, sys, stat, re, pwd, grp
-from fgc import log
+import log
 
 
 
@@ -14,14 +14,7 @@ class Error(EnvironmentError):
 	'''Something went wrong'''
 
 
-def getids(user):
-	try:
-		id = int(user)
-		return (id, id)
-	except ValueError:
-		uid = pwd.getpwnam(user).pw_uid
-		gid = grp.getgrnam(user).gr_gid
-		return (uid, gid)
+
 def uid(user):
 	try: return int(user)
 	except ValueError: return pwd.getpwnam(user).pw_uid
@@ -76,7 +69,7 @@ def cat(fsrc, fdst, length=16*1024, recode=None, sync=False):
 		buf = fsrc.read(length)
 		if not buf: break
 		if recode:
-			from fgc.enc import recode as rec
+			from enc import recode as rec
 			rec(fsrc, fdst, recode)
 		else: fdst.write(buf)
 	if sync: fdst.flush()
@@ -314,8 +307,8 @@ def ln(src, dst, hard=False, recursive=False):
 	except OSError, err: raise Error, err
 
 
-import itertools as it
 from glob import iglob
+import itertools as it
 _glob_cbex = re.compile(r'\{[^}]+\}')
 def glob(pattern):
 	'''Globbing with braces expansion'''
@@ -358,13 +351,19 @@ class GC:
 			if isinstance(act, file): act.close()
 			elif isinstance(act, (str, unicode)): rm(act, onerror=False)
 			else: log.warn('Unknown garbage type: %r'%act)
-	def add(self, *actz): self.__actz.extend(actz)
+	def add(self, *actz):
+		for act in actz:
+			if not isinstance(act, (str, unicode)):
+				try: self.__actz.extend(act)
+				except TypeError: self.__actz.append(act)
+			else: self.__actz.append(act)
 _gc = GC()
 
 def gc(*argz): return _gc.add(*argz)
 
 
 from tempfile import mkstemp
+
 def mktemp(path):
 	'''Helper function to return tmp fhandle and callback to move it into a given place'''
 	tmp_path, tmp = os.path.split(path)
@@ -380,8 +379,10 @@ def mktemp(path):
 				tmp_sync = True # to indicate that we're done with it
 		if atomic:
 			tmp.close()
-			st = cp_stat(dst_path, tmp_path, attrz=True, deference=True)
-			if stat.S_ISLNK(st): dst_path = os.path.readlink(path)
+			try:
+				st = cp_stat(dst_path, tmp_path, attrz=True, deference=True)
+				if stat.S_ISLNK(st.st_mode): dst_path = os.path.readlink(path)
+			except OSError: pass
 			mv(tmp_path, dst_path) # atomic for same fs, a bit dirty otherwise
 		elif not tmp_sync: # file is still opened
 			tmp.seek(0)
@@ -393,12 +394,12 @@ def mktemp(path):
 	return tmp, commit
 
 
-from zlib import crc32
+from zlib import crc32 as zlib_crc32
 def crc32(stream, bs=8192):
-	cs = crc32('')
+	cs, block = zlib_crc32(''), True
 	while block:
 		block = stream.read(bs)
-		cs = cs(block, cs)
+		cs = zlib_crc32(block, cs)
 	return cs
 
 
@@ -448,7 +449,7 @@ class flock(object):
 				fcntl.flock(self._lock, self._type)
 				self.locked = True
 			else:
-				for attempt in xrange(0, timeout, interval):
+				for attempt in xrange(0, timeout, int(interval)):
 					attempt = self.check(True)
 					if attempt: break
 					else:
@@ -475,7 +476,7 @@ class flock(object):
 from time import time
 def multi_lock(*paths, **kwz):
 	locks = list()
-	timeout = kwz.get(timeout)
+	timeout = kwz.get('timeout')
 	deadline = time() + timeout if timeout else None
 	while True:
 		for path in paths:
