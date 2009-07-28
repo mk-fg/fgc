@@ -72,7 +72,7 @@ class Size: pass # hit-the-size-limit state
 class End: pass # hit-the-end state
 
 class AWrapper(object):
-	'''Async I/O objects' wrapper'''
+	'''Async I/O objects wrapper'''
 
 	bs_default = 8192
 	bs_max = 65536
@@ -84,8 +84,12 @@ class AWrapper(object):
 		self._poll_in.register(fd, EPOLLIN | EPOLLERR | EPOLLHUP)
 		self._poll_out.register(fd, EPOLLOUT | EPOLLERR | EPOLLHUP)
 		self.close = pipe.close
-		self.reads = pipe.read
-		self.writes = pipe.write
+		try: # file
+			self.reads = pipe.read
+			self.writes = pipe.write
+		except AttributeError: # socket
+			self.reads = pipe.recv
+			self.writes = pipe.send
 
 	def __del__(self):
 		self._poll_in.close()
@@ -118,7 +122,8 @@ class AWrapper(object):
 					if state: state = Time
 					break
 				bs -= len(ext)
-			else: state = Size # got bs bytes
+			else:
+				if state: state = Size # got bs bytes
 		finally:
 			try: fcntl.fcntl(self._fd, fcntl.F_SETFL, flags) # restore blocking state
 			except: pass # in case there was an error, caused by wrong fd/pipe (not to raise another one)
