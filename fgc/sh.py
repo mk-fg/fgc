@@ -6,6 +6,7 @@ Optimized and simplified a lot, since original implementation was rubbish.
 '''
 
 import os, sys, stat, re, pwd, grp
+from os.path import join, walk
 import log
 
 
@@ -52,12 +53,14 @@ def mode(mode):
 		raise Error, 'Unrecognized file system mode format: %s'%mode
 
 
-def chown(path, tuid=-1, tgid=-1, deference=True, resolve=False):
+def chown(path, tuid=-1, tgid=-1, recursive=False, deference=True, resolve=False):
 	if resolve:
 		if tuid != -1 and ':' in tuid: tuid, tgid = tuid.split(':')
 		tuid, tgid = uid(tuid), gid(tgid)
-	if deference: os.chown(path, tuid, tgid)
-	else: os.lchown(path, tuid, tgid)
+	op = os.chown if deference else os.lchown
+	if recursive:
+		for node in it.imap(ft.partial(join, path), crawl(path, dirs=True)): op(node, tuid, tgid)
+	op(path, tuid, tgid)
 def chmod(path, mode, deference=True):
 	if deference: os.chmod(path, mode)
 	else: os.lchmod(path, mode)
@@ -99,31 +102,31 @@ def cp_cat(src, dst, recode=None, append=False, sync=False):
 		if fsrc: fsrc.close()
 
 
-def cp(src, dst, attrz=False):
+def cp(src, dst, attrz=False, sync=False):
 	'''Copy data and mode bits ("cp src dst"). The destination may be a dir.'''
-	if os.path.isdir(dst): dst = os.path.join(dst, os.path.basename(src))
-	cp_cat(src, dst)
+	if os.path.isdir(dst): dst = join(dst, os.path.basename(src))
+	cp_cat(src, dst, sync=sync)
 	cp_stat(src, dst, attrz=attrz)
 
 
-def cp_stat(src, dst, attrz=False, deference=True):
+def cp_stat(src, dst, attrz=False, deference=True, skip_ts=False):
 	'''Copy mode or full attrz (atime, mtime and ownership) from src to dst'''
 	if deference:
 		chmod = os.chmod
 		chown = os.chown
-		st = os.stat(src)
+		st = os.stat(src) if isinstance(src, (str, unicode)) else src
 	else:
-		st = os.lstat(src)
+		st = os.lstat(src) if isinstance(src, (str, unicode)) else src
 		try:
-			chmod = os.lchmod # Py 2.6 only
+			chmod = os.lchmod # py 2.6 only
 		except AttributeError:
 			if os.path.islink(dst):
-				chmod = lambda dst,mode: True # Don't change any modes
+				chmod = lambda dst,mode: True # don't change any modes
 			else: chmod = os.chmod
 		chown = os.lchown
 	chmod(dst, stat.S_IMODE(st.st_mode))
 	if attrz:
-		if deference: os.utime(dst, (st.st_atime, st.st_mtime))
+		if deference and not skip_ts: os.utime(dst, (st.st_atime, st.st_mtime)) # not for symlinks
 		chown(dst, st.st_uid, st.st_gid)
 	return st
 
@@ -172,8 +175,8 @@ def cp_r(src, dst, symlinks=False, attrz=False, skip=[], onerror=None, atom=cp_d
 			if pat.match(entity): break
 		else:
 			try:
-				src_node = os.path.join(src, entity)
-				dst_node = os.path.join(dst, entity)
+				src_node = join(src, entity)
+				dst_node = join(dst, entity)
 				atom(src_node, dst_node, symlinks=symlinks, attrz=attrz)
 			except (IOError, OSError, Error), err: onerror(src_node, dst_node, str(err))
 	try:
@@ -214,7 +217,7 @@ def rr(path, onerror=None, preserve=[], keep_root=False):
 		for pat in preserve:
 			if pat.match(entity): break
 		else:
-			try: rm(os.path.join(path, entity))
+			try: rm(join(path, entity))
 			except Error, err:
 				if not (preserve and os.path.isdir(path)): # Quite possible, but not 100%
 					if not onerror: raise
@@ -245,11 +248,11 @@ def crawl(top, filter=None, exclude=None, dirs=True, topdown=True, onerror=False
 	except TypeError: filter = [re.compile(regex) for regex in filter]
 	try: exclude = exclude and [re.compile(exclude)]
 	except TypeError: exclude = [re.compile(regex) for regex in exclude]
-	for root, d, f in os.walk(top, topdown=topdown):
+	for root, d, f in walk(top, topdown=topdown):
 		root = root[len(top):].lstrip('/')
 		if dirs: f = d + f # dirs first
 		for name in f:
-			path = os.path.join(root, name)
+			path = join(root, name)
 			if exclude:
 				for regex in exclude:
 					match = regex.search(path)
@@ -267,14 +270,11 @@ def crawl(top, filter=None, exclude=None, dirs=True, topdown=True, onerror=False
 			yield path
 
 
-def touch(path, mode=0644, uid=None, gid=None):
+def touch(path, mode=0644, tuid=-1, tgid=-1, resolve=False):
 	'''Create or truncate a file with given stats.'''
-	open(path, 'wb')
+	open(path, 'w')
 	os.chmod(path, mode)
-	if uid or gid:
-		if not uid: uid = -1
-		if not gid: gid = -1
-		os.chown(path, uid, gid)
+	chown(path, tuid, tgid, resolve=resolve)
 
 
 def mkdir(path, mode=0755, uid=None, gid=None, recursive=False):
@@ -370,6 +370,7 @@ def mktemp(path):
 	tmp_path = mkstemp(prefix=tmp+os.extsep, dir=tmp_path)[1]
 	tmp = open(tmp_path, 'wb+')
 	gc(tmp, tmp_path) # to collect leftover
+	pre_stat = os.path.exists(path) and os.stat(path) # for atomic commits
 	def commit(sync=False, atomic=False):
 		tmp_sync, dst_path = False, path # localize vars
 		try: tmp.flush() # to ensure that next read gets all data
@@ -380,7 +381,7 @@ def mktemp(path):
 		if atomic:
 			tmp.close()
 			try:
-				st = cp_stat(dst_path, tmp_path, attrz=True, deference=True)
+				st = cp_stat(pre_stat or dst_path, tmp_path, attrz=True, deference=True, skip_ts=True)
 				if stat.S_ISLNK(st.st_mode): dst_path = os.path.readlink(path)
 			except OSError: pass
 			mv(tmp_path, dst_path) # atomic for same fs, a bit dirty otherwise
@@ -395,12 +396,19 @@ def mktemp(path):
 
 
 from zlib import crc32 as zlib_crc32
+import functools as ft
 def crc32(stream, bs=8192):
+	'''Calculate crc32 of a given stream, which can be specified as a file-like object,
+		string or a sequence / iterator of objects, which ll be spliced via data.chain function.
+		Note: it may make sense for iterators, but strings can be compared directly.'''
 	cs, block = zlib_crc32(''), True
+	stream = ft.partial(stream.read, bs) if hasattr(stream, 'read') else (
+		iter(stream).next if not isinstance(stream, (str, unicode)) else chain(stream).next )
 	while block:
-		block = stream.read(bs)
+		try: block = stream()
+		except StopIteration: block = ''
 		cs = zlib_crc32(block, cs)
-	return cs
+	return abs(cs)
 
 
 from time import sleep
@@ -442,8 +450,13 @@ class flock(object):
 				fcntl.flock(self._lock, fcntl.LOCK_UN)
 				return False
 
-	def acquire(self, timeout=False, interval=5, shared=None):
-		if not self.locked and shared != self._shared:
+	def acquire(self, timeout=False, interval=5, shared=None, release=False):
+		# Lock is not released before re-locking by default:
+		#  this way will ensure consistency but WILL
+		#  cause deadlock if two scripts will call it on one file.
+		# Alternative way is via release arg.
+		if not self.locked or shared != self._shared:
+			if release and self.locked: self.release() # break consistency, avoid deadlocks
 			if not shared is None: self._shared = shared # update lock type for all future calls as well
 			if not timeout:
 				fcntl.flock(self._lock, self._type)
@@ -475,18 +488,22 @@ class flock(object):
 
 from time import time
 def multi_lock(*paths, **kwz):
+	try: timeout = kwz.pop('timeout')
+	except: deadline = None
+	else: deadline = time() + timeout
 	locks = list()
-	timeout = kwz.get('timeout')
-	deadline = time() + timeout if timeout else None
 	while True:
 		for path in paths:
-			lock = flock(path).check(grab=True)
+			if isinstance(path, (tuple, list)):
+				path, subkwz = path
+				kwz.update(subkwz)
+			lock = flock(path, **kwz).check(grab=True)
 			if not lock: break
 			else: locks.append(lock)
 		else: break
 		for lock in locks: lock.release()
-		if deadline and time() < deadline:
-			raise LockError('Unable to acquire locks: %s'%', '.join(locks))
+		if deadline and time() > deadline:
+			raise LockError('Unable to acquire locks: %s'%', '.join(it.imap(str, paths)))
 		sleep(min(5, deadline-time() if deadline else 5))
 	return locks
 

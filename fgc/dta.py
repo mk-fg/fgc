@@ -54,9 +54,16 @@ def overlap(*argz):
 
 
 def fchain(*procz):
-	def process(data):
-		for proc in procz: data = proc(data)
+	def process(data=fchain):
+		chain = iter(procz)
+		if data is fchain: data = chain.next()() # self-init chain
+		for proc in chain: data = proc(data)
 		return data
+	return process
+
+def fcall(*procz):
+	def process():
+		for proc in procz: proc()
 	return process
 
 
@@ -64,16 +71,37 @@ import itertools as it
 dmap = lambda idict,key=None,val=None: ( (key and key(k) or k, val and val(v) or v) for k,v in idict )
 
 
-def coroutine(func):
-	def start(*argz, **kwz):
-		cr = func(*argz, **kwz)
-		cr.next()
-		return cr
-	return start
+def coroutine(proc):
+    def init(*argz,**kwz):
+        cr = proc(*argz,**kwz)
+        cr.next()
+        return cr
+    return init
+
+
+_cache = dict()
+
+def cached(proc):
+	def memoize(*argz, **kwz):
+		key = id(proc)
+		try: return _cache[key]
+		except KeyError:
+			_cache[key] = proc(*argz, **kwz)
+			return _cache[key]
+	return memoize
+
+def memoized(proc):
+	def memoize(*argz, **kwz):
+		key = tuple(chain(id(proc), argz, kwz.iteritems()))
+		try: return _cache[key]
+		except KeyError:
+			_cache[key] = proc(*argz, **kwz)
+			return _cache[key]
+	return memoize
 
 
 import string, random
-def uid(len=8, charz=string.hexdigits):
+def uid(len=8, charz=string.digits+'abcdef'):
 	buff = buffer('')
 	while len:
 		buff += random.choice(charz)

@@ -29,8 +29,7 @@ def _sem_release():
 
 
 def add(*argz, **kwz): # aka 'schedule task'
-	'''
-	Managed task creation, which can have callback and
+	'''Managed task creation, which can have callback and
 	 is a subject to further management via wait function.
 	Any non-absolute cmd paths are subject to extension
 	 relative to cfg.paths.bin parameter, if any.
@@ -38,44 +37,57 @@ def add(*argz, **kwz): # aka 'schedule task'
 		sys - simulates os.system call (but w/ solid argz and extended
 		 management), implies block.
 		block - blocking execution.
+		silent - redirect pipes to /dev/null, close stdin.
 		callback - started or scheduled after wait call, see callback function.
-		sync - synchronous (native) I/O descriptors. False is MutEx w/ sys and block.
-	'''
+		sync - synchronous (native) I/O descriptors. False is MutEx w/ sys and block.'''
 	try: block = kwz.pop('block')
 	except KeyError: block = False
+	try:
+		if kwz.pop('silent'): kwz.update(dict(stdin=False, stdout=False, stderr=False))
+	except KeyError: void = False
 	try:
 		block |= kwz.pop('sys')
 		kwz.update(dict(stdin=sys.stdin,stdout=sys.stdout,stderr=sys.stderr))
 	except KeyError: pass
+	try: cb = kwz.pop('callback')
+	except KeyError: cb = None
 
 	if not block: _sem_lock() # callback is mandatory in this case, to release semaphore
 
+	if isinstance(argz[0], (str, unicode)): argz = [argz]
 	if not argz[0][0].startswith('/'):
 		try:
 			from config import cfg
 			argz[0][0] = os.path.join(cfg.paths.bin, argz[0][0])
 		except (ImportError, AttributeError): pass
 
-	try: cb = kwz.pop('callback')
-	except KeyError: # no callback given
-		if not block: queue.append(proc(*argz, **kwz))
-		else:
-			ps = proc(*argz, **kwz)
+	ps = proc(*argz, **kwz)
+	if not block: queue.append((ps, cb))
+	else:
+		if not cb:
 			try: return ps.wait()
 			except KeyboardInterrupt, ex:
 				os.kill(ps.pid, signal.SIGINT)
 				ps.wait() # second SIGINT will kill python
-	else: # valid callback
-		if not block: queue.append((proc(*argz, **kwz), cb))
 		else:
-			err = proc(*argz, **kwz).wait()
+			err = ps.wait()
 			callback(cb)
 			return err
 
 _ = add # for compatibility reasons
 
 
-proc = AExec
+def proc(*argz, **kwz):
+	global _void
+	if isinstance(argz[0], (str, unicode)): argz = [argz]
+	for kw in ('stdout', 'stderr'):
+		if kwz.get(kw) is False:
+			if not _void: _void = open('/dev/null', 'w')
+			kwz[kw] = _void
+	proc = AExec(*argz, **kwz)
+	if kwz.get('stdin') is False and proc.stdin: proc.stdin.close()
+	return proc
+
 def pipe(*argz, **kwz):
 	nkwz = dict(stdin=PIPE, stdout=PIPE, stderr=PIPE)
 	nkwz.update(kwz)
@@ -106,7 +118,7 @@ def callback(cb):
 	Run callback, extracted from passed function.
 	Callback will be interpreted as following:
 		- (callable, keywords), if second element is dict
-		- (callable, arguments), if it's some iterable
+		- (callable, arguments), if its some iterable
 		- (callable, argument), otherwise
 		- callable, if passed spec is not a two-element iterable
 	'''
