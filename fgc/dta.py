@@ -32,12 +32,15 @@ class do(dict):
 	def __setattr__(self, k, v): dict.__setitem__(self, k, do_init(v))
 
 
-def chain(*argz):
+def chain(*argz, **kwz):
+	nonempty = kwz.get('nonempty')
 	for arg in argz:
-		if isinstance(arg, atomic): yield arg
+		if nonempty and arg is None: continue
+		elif isinstance(arg, atomic): yield arg
 		else:
 			try:
-				for sub in arg: yield sub
+				for sub in arg:
+					if not nonempty or not sub is None: yield sub
 			except TypeError: yield arg
 
 

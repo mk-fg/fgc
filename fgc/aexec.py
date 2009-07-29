@@ -222,3 +222,12 @@ class AExec(Popen):
 				return Time
 		except: return None # already taken care of
 	__del__ = close
+
+	# Helper functions
+	def writeline(self, line, **kwz):
+		line = str(line)
+		if line[-1] != '\n': self.write(line+'\n', **kwz)
+		else: self.write(line, **kwz)
+		self.stdin.flush()
+	def readline(self): return self.stdout.readline() # TODO: make it compatible w/ AWrapper
+

@@ -95,12 +95,10 @@ def pipe(*argz, **kwz):
 
 
 def wait(n=-1):
-	'''
-	Wait for running subprocesses to finish.
+	'''Wait for running subprocesses to finish.
 	 n can be set to 0 (or None), to wait only for currently running
 	 processes, but not their callbacks, if any. If n is lesser than zero
-	 it'll run 'till all subprocesses have died.
-	'''
+	 itll run till all subprocesses have died.'''
 	if not n: n = len(queue)
 	while n and queue:
 		proc = queue.pop(0)
@@ -114,14 +112,12 @@ def wait(n=-1):
 
 
 def callback(cb):
-	'''
-	Run callback, extracted from passed function.
+	'''Run callback, extracted from passed function.
 	Callback will be interpreted as following:
 		- (callable, keywords), if second element is dict
 		- (callable, arguments), if its some iterable
 		- (callable, argument), otherwise
-		- callable, if passed spec is not a two-element iterable
-	'''
+		- callable, if passed spec is not a two-element iterable'''
 	_sem_release()
 	if not cb: return
 	try: cb,argz = cb
