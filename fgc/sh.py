@@ -16,7 +16,7 @@ class Error(EnvironmentError):
 	'''Something went wrong'''
 
 
-
+def getids(user): return uid(user), gid(user)
 def uid(user):
 	try: return int(user)
 	except ValueError: return pwd.getpwnam(user).pw_uid
