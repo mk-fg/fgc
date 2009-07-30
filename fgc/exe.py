@@ -77,6 +77,7 @@ def add(*argz, **kwz): # aka 'schedule task'
 _ = add # for compatibility reasons
 
 
+_void = None
 def proc(*argz, **kwz):
 	global _void
 	if isinstance(argz[0], (str, unicode)): argz = [argz]
