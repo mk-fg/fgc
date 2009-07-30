@@ -73,7 +73,7 @@ def cat(fsrc, fdst, length=16*1024, recode=None, sync=False):
 		if not buf: break
 		if recode:
 			from enc import recode as rec
-			rec(fsrc, fdst, recode)
+			rec(src=fsrc, dst_enc=recode, dst=fdst)
 		else: fdst.write(buf)
 	if sync: fdst.flush()
 
