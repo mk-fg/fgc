@@ -229,8 +229,7 @@ class Control(object):
 	def __init__(self, path):
 		self._interface = open(path, 'wb')
 
-	def key(self, code):
-		if isinstance(code, str): code = [code]
+	def key(self, *code):
 		release = list()
 		for code in code:
 			try: code = self._translate[code]
