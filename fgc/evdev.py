@@ -4,6 +4,7 @@
 import itertools as it, operator as op
 from string import whitespace as spaces
 from select import epoll, EPOLLIN
+from time import sleep
 from fcntl import ioctl
 from fgc import log
 import struct, sys, os
@@ -142,9 +143,7 @@ class DeviceGroup(object):
 
 
 class EnumDict(dict):
-	'''A 1:1 mapping from numbers to strings or other objects, for enumerated
-		types and other assigned numbers. The mapping can be queried in either
-		direction. All values, by default, map to themselves.'''
+	'Bidirectional mapping'
 	def __init__(self, *seq):
 		super(EnumDict, self).__init__(seq)
 		for k,v in self.items():
@@ -213,6 +212,7 @@ class Event:
 		self.unpack(stream.read(Event.get_format_size()))
 
 
+from contextlib import contextmanager
 class Control(object):
 	_interface = None
 	_translate = { ' ': 'SPACE',
@@ -226,24 +226,46 @@ class Control(object):
 		'-': 'MINUS',
 		'+': 'PLUS' }
 
-	def __init__(self, path):
-		self._interface = open(path, 'wb')
+	def __init__(self, path, persistent=False):
+		self._interface = open(path, 'wb', 0) if persistent else path
 
-	def key(self, *code):
-		release = list()
-		for code in code:
-			try: code = self._translate[code]
-			except KeyError: pass
-			code = 'KEY_%s'%code
-			release.append(code)
-			self._interface.write(Event(
-				type='EV_KEY', code=code, value=1 ).pack())
-		while release:
-			self._interface.write(Event( type='EV_KEY',
-				code=release.pop(), value=0 ).pack())
+	@contextmanager
+	def _if_bind(self):
+		if isinstance(self._interface, file): yield self._interface
+		else:
+			interface = open(self._interface, 'wb', 0)
+			ex = None
+			try: yield interface
+			except Exception as ex: pass
+			finally: interface.close()
+			if ex: raise ex
+
+	def key(self, *code, **kwz):
+		delay = kwz.get('delay', 0)
+		with self._if_bind() as interface:
+			release = list()
+			for code in it.imap(op.methodcaller('upper'), code):
+				try: code = self._translate[code]
+				except KeyError: pass
+				code = 'KEY_%s'%code
+				release.append(code)
+				self._key_syn( interface,
+					Event(type='EV_KEY', code=code, value=1) )
+				sleep(delay)
+			while release:
+				self._key_syn( interface,
+					Event( type='EV_KEY', code=release.pop(), value=0) )
+				sleep(delay)
+
+	def _key_syn(self, interface, key):
+		interface.write(Event(
+			type='EV_SYN', code='SYN_REPORT', value=0 ).pack())
+		# interface.write(Event(
+		# 	type='EV_MSC', code='MSC_SCAN', value=key.scan_code ).pack())
+		interface.write(key.pack())
 
 	def write(self, text):
-		for key in text: kbd.key(key.upper())
+		for key in text: self.key(key.upper())
 
 
 if __name__ == "__main__":

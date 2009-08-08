@@ -57,9 +57,9 @@ def overlap(*argz):
 
 
 def fchain(*procz):
-	def process(data=fchain):
+	def process(*argz, **kwz):
 		chain = iter(procz)
-		if data is fchain: data = chain.next()() # self-init chain
+		data = chain.next()(*argz, **kwz)
 		for proc in chain: data = proc(data)
 		return data
 	return process
