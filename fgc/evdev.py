@@ -264,8 +264,9 @@ class Control(object):
 		# 	type='EV_MSC', code='MSC_SCAN', value=key.scan_code ).pack())
 		interface.write(key.pack())
 
-	def write(self, text):
-		for key in text: self.key(key.upper())
+	def write(self, *argz, **kwz):
+		if len(argz) == 1: argz = argz[0]
+		for key in argz: self.key(key.upper(), **kwz)
 
 
 if __name__ == "__main__":
