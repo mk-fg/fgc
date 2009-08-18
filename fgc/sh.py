@@ -7,7 +7,7 @@ Optimized and simplified a lot, since original implementation was rubbish.
 
 import os, sys, stat, re, pwd, grp
 from os.path import join
-from os import walk
+from os import walk, rmdir
 import log
 
 
@@ -17,6 +17,9 @@ class Error(EnvironmentError):
 
 
 def getids(user): return uid(user), gid(user)
+def resolve_ids(tuid=-1, tgid=-1):
+	if tuid != -1 and ':' in tuid: tuid, tgid = tuid.split(':')
+	return uid(tuid), gid(tgid)
 def uid(user):
 	try: return int(user)
 	except ValueError: return pwd.getpwnam(user).pw_uid
@@ -55,9 +58,7 @@ def mode(mode):
 
 
 def chown(path, tuid=-1, tgid=-1, recursive=False, deference=True, resolve=False):
-	if resolve:
-		if tuid != -1 and ':' in tuid: tuid, tgid = tuid.split(':')
-		tuid, tgid = uid(tuid), gid(tgid)
+	if resolve: tuid, tgid = resolve_ids(tuid, tgid)
 	op = os.chown if deference else os.lchown
 	if recursive:
 		for node in it.imap(ft.partial(join, path), crawl(path, dirs=True)): op(node, tuid, tgid)
@@ -69,7 +70,7 @@ def chmod(path, mode, deference=True):
 
 def cat(fsrc, fdst, length=16*1024, recode=None, sync=False):
 	'''copy data from file-like object fsrc to file-like object fdst'''
-	while 1:
+	while True:
 		buf = fsrc.read(length)
 		if not buf: break
 		if recode:
@@ -195,7 +196,7 @@ def rm(path, onerror=None):
 	try: mode = os.lstat(path).st_mode
 	except OSError: mode = 0
 	try:
-		if stat.S_ISDIR(mode): os.rmdir(path)
+		if stat.S_ISDIR(mode): rmdir(path)
 		else: os.remove(path)
 	except OSError, err:
 		if onerror: onerror(path, err)
@@ -278,8 +279,9 @@ def touch(path, mode=0644, tuid=-1, tgid=-1, resolve=False):
 	chown(path, tuid, tgid, resolve=resolve)
 
 
-def mkdir(path, mode=0755, uid=None, gid=None, recursive=False):
+def mkdir(path, mode=0755, tuid=-1, tgid=-1, recursive=False, resolve=False):
 	'''Create a dir with given stats.'''
+	if resolve: tuid, tgid = resolve_ids(tuid, tgid)
 	ppath = path
 	if recursive:
 		stack = []
@@ -290,10 +292,7 @@ def mkdir(path, mode=0755, uid=None, gid=None, recursive=False):
 	for ppath in stack:
 		try:
 			os.mkdir(ppath, mode)
-			if uid != None or gid != None:
-				if uid == None: uid = -1
-				if gid == None: gid = -1
-				os.chown(ppath, uid, gid)
+			if tuid != -1 or tgid != -1: os.chown(ppath, tuid, tgid)
 		except OSError, err: raise Error, err
 
 
