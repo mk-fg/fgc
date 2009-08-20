@@ -200,7 +200,7 @@ def rm(path, onerror=None):
 		else: os.remove(path)
 	except OSError, err:
 		if onerror: onerror(path, err)
-		elif onerror != False: raise Error, err
+		elif onerror is not False: raise Error, err
 
 
 def rr(path, onerror=None, preserve=[], keep_root=False):
@@ -219,7 +219,7 @@ def rr(path, onerror=None, preserve=[], keep_root=False):
 		for pat in preserve:
 			if pat.match(entity): break
 		else:
-			try: rm(join(path, entity))
+			try: rm(join(path, entity), onerror=onerror)
 			except Error, err:
 				if not (preserve and os.path.isdir(path)): # Quite possible, but not 100%
 					if not onerror: raise
