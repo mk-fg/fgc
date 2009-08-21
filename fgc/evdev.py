@@ -18,7 +18,7 @@ def get_evmaps():
 	type_map = EnumDict()
 	code_maps = dict()
 
-	for line in open('/usr/src/linux-2.6.30-gentoo-r4/include/linux/input.h'):
+	for line in open('/usr/src/linux/include/linux/input.h'):
 		if not line.startswith('#define'): continue
 		line = line[8:] # cut '#define'
 		try: event, code = line.split('\t', 1)
