@@ -8,7 +8,7 @@ class TerminalController:
 
 	`TerminalController` defines a set of instance variables whose
 	values are initialized to the control sequence necessary to
-	perform a given action.  These can be simply included in normal
+	perform a given action.	These can be simply included in normal
 	output to the terminal:
 
 		>>> term = TerminalController()
@@ -21,7 +21,7 @@ class TerminalController:
 		>>> print term.render('This is ${GREEN}green${NORMAL}')
 
 	If the terminal doesn't support a given action, then the value of
-	the corresponding instance variable will be set to ''.  As a
+	the corresponding instance variable will be set to ''.	As a
 	result, the above code will still work on terminals that do not
 	support color, except that their output will not be colored.
 	Also, this means that you can test whether the terminal supports a
@@ -37,30 +37,30 @@ class TerminalController:
 	"""
 	# Cursor movement:
 	BOL = ''			 #: Move the cursor to the beginning of the line
-	UP = ''			  #: Move the cursor up one line
+	UP = ''				#: Move the cursor up one line
 	DOWN = ''			#: Move the cursor down one line
 	LEFT = ''			#: Move the cursor left one char
-	RIGHT = ''		   #: Move the cursor right one char
+	RIGHT = ''			 #: Move the cursor right one char
 
 	# Deletion:
 	CLEAR_SCREEN = ''	#: Clear the screen and move to home position
-	CLEAR_EOL = ''	   #: Clear to the end of the line.
-	CLEAR_BOL = ''	   #: Clear to the beginning of the line.
-	CLEAR_EOS = ''	   #: Clear to the end of the screen
+	CLEAR_EOL = ''		 #: Clear to the end of the line.
+	CLEAR_BOL = ''		 #: Clear to the beginning of the line.
+	CLEAR_EOS = ''		 #: Clear to the end of the screen
 
 	# Output modes:
 	BOLD = ''			#: Turn on bold mode
-	BLINK = ''		   #: Turn on blink mode
+	BLINK = ''			 #: Turn on blink mode
 	DIM = ''			 #: Turn on half-bright mode
 	REVERSE = ''		 #: Turn on reverse-video mode
-	NORMAL = ''		  #: Turn off all modes
+	NORMAL = ''			#: Turn off all modes
 
 	# Cursor display:
 	HIDE_CURSOR = ''	 #: Make the cursor invisible
 	SHOW_CURSOR = ''	 #: Make the cursor visible
 
 	# Terminal size:
-	COLS = None		  #: Width of the terminal (None for unknown)
+	COLS = None			#: Width of the terminal (None for unknown)
 	LINES = None		 #: Height of the terminal (None for unknown)
 
 	# Foreground colors:
@@ -78,7 +78,9 @@ class TerminalController:
 	_COLORS = """BLACK BLUE GREEN CYAN RED MAGENTA YELLOW WHITE""".split()
 	_ANSICOLORS = "BLACK RED GREEN YELLOW BLUE MAGENTA CYAN WHITE".split()
 
-	def __init__(self, term_stream=sys.stdout, check_tty=False):
+	_close_colors = True
+
+	def __init__(self, term_stream=sys.stdout, check_tty=False, close_colors=None):
 		"""
 		Create a `TerminalController` and initialize its attributes
 		with appropriate values for the current terminal.
@@ -93,10 +95,13 @@ class TerminalController:
 		# If the stream isn't a tty, then assume it has no capabilities.
 		if check_tty and not term_stream.isatty(): return
 
-		# Check the terminal type.  If we fail, then assume that the
+		# Check the terminal type.	If we fail, then assume that the
 		# terminal has no capabilities.
 		try: curses.setupterm()
 		except: return
+
+		# Check / set close_colors flag
+		if close_colors is not None: self._close_colors = close_colors
 
 		# Look up numeric capabilities.
 		self.COLS = curses.tigetnum('cols')
@@ -133,18 +138,22 @@ class TerminalController:
 		cap = curses.tigetstr(cap_name) or ''
 		return re.sub(r'\$<\d+>[/*]?', '', cap)
 
-	def render(self, template):
+	def render(self, template, color=None):
 		"""
 		Replace each $-substitutions in the given template string with
 		the corresponding terminal control string (if it's defined) or
 		'' (if it's not).
 		"""
-		return re.sub(r'\$\$|\${\w+}', self._render_sub, template)
+		template = re.sub(r'\$\$|\${\w*}', self._render_sub, template)
+		if color: template = color + template + self.NORMAL
+		elif self._close_colors: template += self.NORMAL
+		return template
 
 	def _render_sub(self, match):
 		s = match.group()
 		if s == '$$': return s
-		else: return getattr(self, s[2:-1])
+		s = s[2:-1]
+		return self.NORMAL if not s else getattr(self, s)
 
 
 
@@ -154,7 +163,7 @@ class ProgressBar:
 
 								Header
 		20% [===========----------------------------------]
-						   progress message
+							 progress message
 
 	The progress bar is colored, if the terminal supports color
 	output; and adjusts to the width of the terminal.
