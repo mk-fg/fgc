@@ -1,4 +1,5 @@
 from aexec import AExec, Threader, PIPE, Time, Size, End
+from dta import chain
 import os, sys, signal
 
 
@@ -81,6 +82,8 @@ _void = None
 def proc(*argz, **kwz):
 	global _void
 	if isinstance(argz[0], (str, unicode)): argz = [argz]
+	if 'env' in kwz and kwz.pop('env'):
+		argz[0] = list(chain('/usr/bin/env', argz[0]))
 	for kw in ('stdout', 'stderr'):
 		if kwz.get(kw) is False:
 			if not _void: _void = open('/dev/null', 'w')
