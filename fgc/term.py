@@ -144,7 +144,7 @@ class TerminalController:
 		the corresponding terminal control string (if it's defined) or
 		'' (if it's not).
 		"""
-		template = re.sub(r'\$\$|\${\w*}', self._render_sub, template)
+		template = re.sub(r'\$\$|\${\w*}', self._render_sub, str(template))
 		if color: template = color + template + self.NORMAL
 		elif self._close_colors: template += self.NORMAL
 		return template
