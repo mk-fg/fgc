@@ -165,6 +165,7 @@ class FileBridge(object):
 	def __init__(self, src, leash):
 		self.__src = os.fdopen(src.fileno(), src.mode)
 		self.__leash = (src, leash)
+	__iter__ = lambda s: iter(s.__src)
 	__getattr__ = lambda s,k: getattr(s.__src,k)
 
 
