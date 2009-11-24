@@ -132,3 +132,31 @@ def callback(cb):
 			try: return cb(*argz)
 			except TypeError: pass
 		return cb(argz)
+
+
+import traceback
+
+def ext_traceback():
+	message = buffer('')
+	tb = sys.exc_info()[2]
+	while True:
+		if not tb.tb_next: break
+		tb = tb.tb_next
+	stack = list()
+	frame = tb.tb_frame
+	while frame:
+		stack.append(frame)
+		frame = frame.f_back
+	stack.reverse()
+	message += traceback.format_exc()
+	message += 'Locals by frame, innermost last\n'
+	for frame in stack:
+		message += '\nFrame %s in %s at line %s\n' \
+			% (frame.f_code.co_name, frame.f_code.co_filename, frame.f_lineno)
+		for var,val in frame.f_locals.items():
+			message += "  %20s = "%var
+			try: message += "%s\n"%val
+			except:
+				try: message += "%r\n"%val
+				except: message += "<str/repr failed>\n"
+	return message

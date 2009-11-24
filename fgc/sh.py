@@ -364,14 +364,20 @@ def gc(*argz): return _gc.add(*argz)
 
 from tempfile import mkstemp
 
-def mktemp(path):
+def mktemp(path, mode=None, tuid=-1, tgid=-1, atomic=False, sync=False):
 	'''Helper function to return tmp fhandle and callback to move it into a given place'''
 	tmp_path, tmp = os.path.split(path)
 	tmp_path = mkstemp(prefix=tmp+os.extsep, dir=tmp_path)[1]
 	tmp = open(tmp_path, 'wb+')
 	gc(tmp, tmp_path) # to collect leftover
+	post_stat = list()
+	if mode:
+		post_stat.append(ft.partial(chmod, mode=mode))
+	if tuid != -1 or tgid != -1:
+		post_stat.append(ft.partial(chown, tuid=tuid, tgid=tgid))
 	pre_stat = os.path.exists(path) and os.stat(path) # for atomic commits
-	def commit(sync=False, atomic=False):
+
+	def commit(sync=sync, atomic=atomic): # default values from parent function
 		tmp_sync, dst_path = False, path # localize vars
 		try: tmp.flush() # to ensure that next read gets all data
 		except ValueError:
@@ -381,7 +387,12 @@ def mktemp(path):
 		if atomic:
 			tmp.close()
 			try:
-				st = cp_stat(pre_stat or dst_path, tmp_path, attrz=True, deference=True, skip_ts=True)
+				if not post_stat:
+					st = cp_stat(pre_stat or dst_path, tmp_path,
+						attrz=True, deference=True, skip_ts=True) # copy attrz from dst
+				else:
+					st = pre_stat or os.stat(dst_path)
+					while post_stat: post_stat.pop()(tmp_path) # use passed attrz
 				if stat.S_ISLNK(st.st_mode): dst_path = os.path.readlink(path)
 			except OSError: pass
 			mv(tmp_path, dst_path) # atomic for same fs, a bit dirty otherwise
@@ -391,7 +402,10 @@ def mktemp(path):
 				cat(tmp, src)
 				if sync: src.flush()
 			tmp.close()
+		if post_stat: # for closed non-atomic or fuckup cases
+			while post_stat: post_stat.pop()(dst_path) # set passed attrz
 		rm(tmp_path, onerror=False)
+
 	return tmp, commit
 
 
@@ -424,7 +438,7 @@ class flock(object):
 	@property
 	def _type(self): return fcntl.LOCK_EX if not self._shared else fcntl.LOCK_SH
 
-	def __init__(self, path, make=False, shared=False, remove=None):
+	def __init__(self, path, make=False, shared=False, remove=None, timeout=None):
 		self.locked = self._del = False
 		if remove == None: remove = make
 		try: self._lock = open(path)
@@ -435,6 +449,7 @@ class flock(object):
 			else: raise Error, err
 		if remove: self._del = path
 		self._shared = shared
+		if timeout is not None: self.acquire(timeout)
 
 	def check(self, grab=False):
 		if self.locked: return self.locked

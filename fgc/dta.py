@@ -1,7 +1,14 @@
+import itertools as it, operator as op, functools as ft
 from string import whitespace as spaces
 from contextlib import contextmanager
 
-atomic = str, int, float, unicode # data types, considered uniterable
+
+import types
+atomic = types.StringTypes, int, float # data types, considered uniterable
+
+
+
+### TODO: Merge hosting.config here
 do_init = lambda dta: do( (k, do_init(v)) for k,v in dta.iteritems() ) if isinstance(dta, dict) else dta
 
 @contextmanager
@@ -19,6 +26,7 @@ def __import(path):
 		cfg.seek(0)
 		return _process(cfg.read().replace('\n', '') if json_format else cfg)
 
+### TODO: Merge hosting.config here
 class do(dict):
 	'''DataObject - dict with JS-like key=attr access'''
 	def __init__(self, *argz, **kwz):
@@ -32,8 +40,19 @@ class do(dict):
 	def __setattr__(self, k, v): dict.__setitem__(self, k, do_init(v))
 
 
+
+def frozen(obj):
+	if isinstance(obj, dict):
+		return frozenset((frozen(x[0]), frozen(x[1])) for x in obj)
+	if isinstance(obj, set):
+		return frozenset(it.imap(frozen, obj))
+	if isinstance(obj, (list, tuple, collections.deque)):
+		return tuple(it.imap(frozen, obj))
+	return obj
+
+
 def chain(*argz, **kwz):
-	nonempty = kwz.get('nonempty')
+	nonempty = kwz.get('nonempty', False)
 	for arg in argz:
 		if nonempty and arg is None: continue
 		elif isinstance(arg, atomic): yield arg
@@ -70,8 +89,8 @@ def fcall(*procz):
 	return process
 
 
-import itertools as it
-dmap = lambda idict,key=None,val=None: ( (key and key(k) or k, val and val(v) or v) for k,v in idict )
+dmap = lambda idict, key=None, val=None: \
+	((key and key(k) or k, val and val(v) or v) for k,v in idict)
 
 
 def coroutine(proc):
@@ -83,24 +102,29 @@ def coroutine(proc):
 
 
 _cache = dict()
-
 def cached(proc):
 	def memoize(*argz, **kwz):
-		key = id(proc)
+		key = id(proc), frozen(argz), frozen(kwz)
 		try: return _cache[key]
 		except KeyError:
-			_cache[key] = proc(*argz, **kwz)
-			return _cache[key]
+			result = _cache[key] = proc(*argz, **kwz)
+			return result
 	return memoize
+memoized = cached
 
-def memoized(proc):
-	def memoize(*argz, **kwz):
-		key = tuple(chain(id(proc), argz, kwz.iteritems()))
-		try: return _cache[key]
-		except KeyError:
-			_cache[key] = proc(*argz, **kwz)
-			return _cache[key]
-	return memoize
+
+_counters = dict()
+def countdown(val, message=None, error=StopIteration):
+	if not message:
+		while True:
+			name = uid()
+			if name not in _counters: break
+	else: name = message
+	_counters[name] = val
+	def counter():
+		_counters[name] -= 1
+		if _counters[name] <= 0: raise error(message or 'countdown')
+	return counter
 
 
 import string, random
@@ -110,3 +134,58 @@ def uid(len=8, charz=string.digits+'abcdef'):
 		buff += random.choice(charz)
 		len -= 1
 	return buff
+
+
+
+from time import time
+
+class flow_limit:
+	grace_queue = list()
+
+	_k = 1
+	_sequence = False
+
+	def __init__(self, grace=5, delay = 2*60, delay_inc=ft.partial(op.mul, 2)):
+		'''Parameters:
+			grace (5) # number of mails that can be sent simultaneously unhindered
+			delay (2*60) # min interval (seconds) for grace-batch
+			delay_inc (*2) - delay increment function'''
+		self.grace, self.delay, self.delay_inc = grace, delay, delay_inc
+
+	def poll(self):
+		ts = time()
+		self.grace_queue.append(ts)
+		self.grace_queue = filter( # discard older values
+			ft.partial(op.lt, ts - self.delay * self._k), self.grace_queue )
+		if len(grace_queue) <= self.grace:
+			if not self._sequence: self._k = 1
+			else: self._k = self.delay_inc(self._k)
+			self._sequence = False
+			return True
+		else:
+			self._sequence = True
+			return False
+
+	def delay(self):
+		return self.delay * self._k - (time() - min(self.grace_queue))
+
+
+
+
+## Not used yet
+# from weakref import WeakValueDictionary, ref as _ref
+
+# def ref(val):
+# 	return Ptr(None, val) if isinstance( val, immutable + bimutable ) else _ref(val)
+
+# class Ptr(namedtuple('Ptr', 'key value')):
+# 	__slots__ = ()
+# 	def __call__(self): return self.value
+
+# class PtrDict(WeakValueDictionary):
+# 	'''WeakValueDictionary w/ support for immutable types'''
+# 	def __setitem__(self, key, value):
+# 		if isinstance(value, immutable + bimutable): self.data[key] = Ptr(key, value)
+# 		else: WeakValueDictionary.__setitem__(self, key, value)
+# 	__str__ = lambda s: '<PtrDict: %s id:%s>'%(dict(s.iteritems()), id(s))
+# 	__repr__ = lambda s: '<PtrDict %s>'%id(s)
