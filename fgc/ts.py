@@ -17,6 +17,11 @@ def reldate(date, now = None):
 	else: return date.strftime('%b %Y')
 
 
+
+def htime(secs=None):
+	return time.strftime('%d.%m.%y %H:%M:%S', time.localtime(secs))
+
+
 rez = {
 	'iso': r"(?P<year>[0-9]{4})(-(?P<month>[0-9]{1,2})(-(?P<day>[0-9]{1,2})"\
 		r"((?P<separator>.)(?P<hour>[0-9]{2}):(?P<minute>[0-9]{2})(:(?P<second>[0-9]{2})(\.(?P<fraction>[0-9]+))?)?"\

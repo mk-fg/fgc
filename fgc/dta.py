@@ -139,35 +139,57 @@ def uid(len=8, charz=string.digits+'abcdef'):
 
 from time import time
 
-class flow_limit:
-	grace_queue = list()
 
-	_k = 1
-	_sequence = False
+class flow_tbf(object):
+	_tick_mul = 1
+	_spree = False
 
-	def __init__(self, grace=5, delay = 2*60, delay_inc=ft.partial(op.mul, 2)):
-		'''Parameters:
-			grace (5) # number of mails that can be sent simultaneously unhindered
-			delay (2*60) # min interval (seconds) for grace-batch
-			delay_inc (*2) - delay increment function'''
-		self.grace, self.delay, self.delay_inc = grace, delay, delay_inc
+	def __init__(self, flow=5, burst=5, tick=2*60, tick_inc=None):
+		self.fill_rate = flow
+		self.capacity = self._tokens = burst
+		self.tick = self._tick = tick
+		self._tick_inc = tick_inc
+		self._synctime = self.time
 
-	def poll(self):
-		ts = time()
-		self.grace_queue.append(ts)
-		self.grace_queue = filter( # discard older values
-			ft.partial(op.lt, ts - self.delay * self._k), self.grace_queue )
-		if len(grace_queue) <= self.grace:
-			if not self._sequence: self._k = 1
-			else: self._k = self.delay_inc(self._k)
-			self._sequence = False
+	@property
+	def tick(self): return self._tick * self._tick_mul
+
+	@property
+	def time(self): return time() // self.tick
+
+	@property
+	def tokens(self):
+		if self._tokens < self.capacity:
+			ts = self.time()
+			delta = self.fill_rate * (ts - self._synctime)
+			self._tokens = min(self.capacity, self._tokens + delta)
+			self._synctime = ts
+		return self._tokens
+
+	def consume(self, count=1, block=False):
+		tc = self.tokens
+
+		if count <= tc:
+			if self._spree: # finish overflow spree, if any
+				self._spree = False
+				self._tick_mul = 1
+			self._tokens -= count
 			return True
-		else:
-			self._sequence = True
-			return False
 
-	def delay(self):
-		return self.delay * self._k - (time() - min(self.grace_queue))
+		elif block:
+			if count > self.capacity:
+				raise ValueError, ( 'Token bucket filter deadlock:'
+					' %s tokens requested, while max capacity is %s'%(count, self.capacity) )
+			sleep((count - tc) * self.tick)
+			if self._tick_inc:
+				if self._spree: self._tick_mul = self._tick_inc(self._tick_mul)
+				self._spree = True
+			return self.consume(count=count, block=block)
+
+		else: return False
+
+	next = consume
+	__iter__ = lambda s: iter(s)
 
 
 
