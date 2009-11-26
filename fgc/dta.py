@@ -137,60 +137,122 @@ def uid(len=8, charz=string.digits+'abcdef'):
 
 
 
-from time import time
+# class BInt(object):
+# 	def __init__(self, value=0, limit=1):
+# 		self.value, self._liimit = value, abs(limit)
+
+# 	@property
+# 	def bounded(self):
+# 		if self.value < -self._limit: self.value = -self._limit
+# 		elif self.value > self._limit: self.value = self._limit
+# 		return self
+# 	@property
+# 	def max(self): return self.value == self.limit
+# 	@property
+# 	def mim(self): return self.value == -self.limit
+
+# 	def __add__(self, val):
+# 		self.value += self.value
+# 		return self.bounded
+# 	def __sub__(self, val):
+# 		self.value -= self.value
+# 		return self.bounded
+# 	def __nonempty__(self):
+# 		return self.value != 0
+# 	__bool__ = __nonempty__
+# 	def __int__(self): return int(self.value)
+# 	def __long__(self): return long(self.value)
+# 	def __float__(self): return float(self.value)
 
 
-class flow_tbf(object):
-	_tick_mul = 1
-	_spree = False
+# from time import time
 
-	def __init__(self, flow=5, burst=5, tick=2*60, tick_inc=None):
-		self.fill_rate = flow
-		self.capacity = self._tokens = burst
-		self.tick = self._tick = tick
-		self._tick_inc = tick_inc
-		self._synctime = self.time
+# class FC_TokenBucket(object):
+# 	'''Token bucket flow control mechanism implementation.
 
-	@property
-	def tick(self): return self._tick * self._tick_mul
+# 		Essentially it behaves like a bucket of given capacity (burst),
+# 		which fills by fill_rate (flow) tokens per time unit (tick, seconds).
+# 		Every poll / consume call take tokens to execute, and either
+# 		block until theyre available (consume+block) or return False,
+# 		if specified amount of tokens is not available.
+# 		Blocking request for more tokens when bucket capacity raises an
+# 		exception.
 
-	@property
-	def time(self): return time() // self.tick
+# 		tick_strangle / tick_free is a functions (or values) to set/adjust
+# 		fill_rate coefficient (default: 1) in case of consequent blocks /
+# 		grabs - cases when bucket fill_rate is constantly lower
+# 		(non-blocking requests doesnt counts) / higher than token
+# 		requests.'''
 
-	@property
-	def tokens(self):
-		if self._tokens < self.capacity:
-			ts = self.time()
-			delta = self.fill_rate * (ts - self._synctime)
-			self._tokens = min(self.capacity, self._tokens + delta)
-			self._synctime = ts
-		return self._tokens
+# 	_tick_mul = 1
 
-	def consume(self, count=1, block=False):
-		tc = self.tokens
+# 	def __init__( self, flow=1, burst=5, tick=1, block=False,
+# 			tick_strangle=None, tick_free=None, start=None ):
+# 		'''flow: how many tokens are added per tick;
+# 			burst: bucket size;
+# 			tick (seconds): time unit of operation;
+# 			tick_strangle / tick_free:
+# 				hooks for consequent token shortage / availability,
+# 				can be either int/float/long or a function, accepting
+# 				current flow multiplier as a single argument;
+# 			start:
+# 				starting bucket size, either int/float/long or a function
+# 				of bucket capacity.'''
+# 		self.fill_rate = flow
+# 		self.capacity = burst
+# 		self._tokens = burst if start is None else self._mod(start, burst)
+# 		self._tick = tick
+# 		self._tick_strangle = tick_strangle
+# 		self._tick_free = tick_free
+# 		self._vector = BInt(limit=(1 if block else 2))
+# 		self._synctime = time()
 
-		if count <= tc:
-			if self._spree: # finish overflow spree, if any
-				self._spree = False
-				self._tick_mul = 1
-			self._tokens -= count
-			return True
+# 	_mod = lambda(s, method, val): \
+# 		method if isinstance(method, (int, float, long)) else method(self._tick_mul)
 
-		elif block:
-			if count > self.capacity:
-				raise ValueError, ( 'Token bucket filter deadlock:'
-					' %s tokens requested, while max capacity is %s'%(count, self.capacity) )
-			sleep((count - tc) * self.tick)
-			if self._tick_inc:
-				if self._spree: self._tick_mul = self._tick_inc(self._tick_mul)
-				self._spree = True
-			return self.consume(count=count, block=block)
+# 	free = lambda s: s._tick_mul = s._mod(self._tick_free)
+# 	strangle = lambda s: s._tick_mul = s._mod(self._tick_strangle)
 
-		else: return False
+# 	@property
+# 	def tick(self): return self._tick * self._tick_mul
 
-	next = consume
-	__iter__ = lambda s: iter(s)
+# 	@property
+# 	def tokens(self):
+# 		if self._tokens < self.capacity:
+# 			ts, tick = time(), self.tick
+# 			delta = self.fill_rate * (ts // tick - self._synctime // tick)
+# 			self._tokens = min(self.capacity, self._tokens + delta)
+# 			self._synctime = ts
+# 		return self._tokens
 
+# 	def consume(self, count=1):
+# 		tc = self.tokens
+
+# 		if count <= tc: # enough tokens are available
+# 			if self._vector.max \
+# 					and self._tick_free is not None: self.free()
+# 			self._vector += 1
+# 			self._tokens -= count
+# 			return True
+
+# 		else: # wait for tokens or lend them
+# 			if block and count > self.capacity:
+# 				## TODO: Implement buffered grab for this case?
+# 				raise ValueError, ( 'Token bucket filter deadlock:'
+# 					' %s tokens requested, while max capacity is %s'%(count, self.capacity) )
+# 			if block: sleep((count - tc) * self.tick)
+# 			if self._vector.min \
+# 					and self._tick_strangle is not None \
+# 					and (block or self._tokens > 0): self.strangle()
+# 			self._vector -= 1
+# 			if block: self._tokens -= count
+# 			return block
+
+# 	def poll(self, count=1):
+# 		if count <= self.tokens:
+# 			self._tokens -= count
+# 			return True
+# 		else: return False
 
 
 
