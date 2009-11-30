@@ -137,6 +137,28 @@ def uid(len=8, charz=string.digits+'abcdef'):
 	return buff
 
 
+
+class ProxyObject(object):
+	__slots__ = '_obj', '__weakref__'
+	def __init__(self, obj):
+		super(ProxyObject, self).__setattr__('_obj', obj)
+
+	def __getattr__(self, name):
+		return getattr(super(ProxyObject, self).__getattribute__('_obj'), name)
+	def __delattr__(self, name):
+		delattr(super(ProxyObject, self).__getattribute__('_obj'), name)
+	def __setattr__(self, name, value):
+		setattr(super(ProxyObject, self).__getattribute__('_obj'), name, value)
+
+	def __nonzero__(self):
+		return bool(super(ProxyObject, self).__getattribute__('_obj'))
+	def __str__(self):
+		return str(super(ProxyObject, self).__getattribute__('_obj'))
+	def __repr__(self):
+		return repr(super(ProxyObject, self).__getattribute__('_obj'))
+
+
+
 ## Not used yet
 # from weakref import WeakValueDictionary, ref as _ref
 
