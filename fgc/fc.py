@@ -34,22 +34,27 @@ class BInt(object):
 from collections import deque
 
 class RRQ(deque): # round-robin queue
-	_limit = None
+	dropped = 0
 	def __init__(self, limit):
-		self._limit = 5
+		self._limit = limit
 		super(RRQ, self).__init__()
 	def _trim(self, size=None):
 		if size is None: size = self._limit
-		while len(self) > size: self.popleft()
+		while len(self) > size:
+			self.popleft()
+			self.dropped += 1
 	def append(self, *argz):
 		self._trim()
 		super(RRQ, self).append(*argz)
 	def extend(self, *argz):
 		self._trim()
 		super(RRQ, self).extend(*argz)
-	def flush(self): self._trim(0)
+	def flush(self):
+		self._trim(0)
+		self.dropped = 0
 	@property
-	def is_full(self): return len(self) == self._limit
+	def is_full(self):
+		return len(self) == self._limit
 
 
 
@@ -136,6 +141,14 @@ class FC_TokenBucket(object):
 			self._synctime = ts
 		return self._tokens
 
+	def get_eta(self, count=1):
+		'Return amount of seconds until the given number of tokens will be available'
+		if count > self.capacity:
+			## TODO: Implement buffered grab for this case?
+			raise ValueError, ( 'Token bucket deadlock:'
+				' %s tokens requested, while max capacity is %s'%(count, self.capacity) )
+		return self.tick - time() % self.tick
+
 	def consume(self, count=1, block=False):
 		'Take tokens from the bucket'
 		tc = self.tokens
@@ -146,11 +159,7 @@ class FC_TokenBucket(object):
 			return True
 
 		elif block: # wait for tokens
-			if block and count > self.capacity:
-				## TODO: Implement buffered grab for this case?
-				raise ValueError, ( 'Token bucket filter deadlock:'
-					' %s tokens requested, while max capacity is %s'%(count, self.capacity) )
-			sleep((count - tc) * self.tick)
+			sleep(self.get_eta(count))
 			self._spree |= FC_STARVE # to ensure the 'empty' set/check
 			return self.consume(count=count, block=block)
 
