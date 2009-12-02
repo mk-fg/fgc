@@ -134,11 +134,12 @@ class FC_TokenBucket(object):
 	@property
 	def tokens(self):
 		'Number of tokens in the bucket at the moment'
+		ts = time()
 		if self._tokens < self.capacity:
-			ts, tick = time(), self.tick
-			delta = self.fill_rate * (ts // tick - self._synctime // tick)
-			self._tokens = min(self.capacity, self._tokens + delta)
-			self._synctime = ts
+			self._tokens = min( self.capacity,
+				self._tokens + self.fill_rate *
+					(ts // self.tick - self._synctime // self.tick) )
+		self._synctime = ts
 		return self._tokens
 
 	def get_eta(self, count=1):
