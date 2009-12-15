@@ -53,10 +53,12 @@ class Window(ProxyObject):
 		if state is not None and self.get_state() & state: return True
 		xlib_props = self._xlib_win.get_property(
 			_xlib_atom('_NET_WM_STATE'), X.AnyPropertyType, 0, 100 )
-		if xlib_props and (
-				_xlib_atom('_NET_WM_STATE_FULLSCREEN') in xlib_props.value or (
-					_xlib_atom('_NET_WM_STATE_MAXIMIZED_HORZ') in xlib_props.value
-					and _xlib_atom('_NET_WM_STATE_MAXIMIZED_VERT') in xlib_props.value ) ):
+		if xlib_props and ( # feel teh backhand of human-readable varz! ;)
+				_xlib_atom('_NET_WM_STATE_FULLSCREEN') in xlib_props.value
+					or ( state & gtk.gdk.WINDOW_STATE_MAXIMIZED
+						and not state & gtk.gdk.WINDOW_STATE_FULLSCREEN
+						and (_xlib_atom('_NET_WM_STATE_MAXIMIZED_HORZ') in xlib_props.value
+							and _xlib_atom('_NET_WM_STATE_MAXIMIZED_VERT') in xlib_props.value) ) ):
 			return True
 		if jitter is not None:
 			screen = self.get_screen()
