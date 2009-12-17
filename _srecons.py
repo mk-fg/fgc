@@ -4,13 +4,16 @@ from subprocess import Popen, PIPE
 from time import sleep, strftime
 import os, sys, hashlib
 
-ver_minor = sum(1 for i in Popen(['/usr/bin/env', 'git', 'rev-list',
-	'--since=%s'%strftime('01.%m.%Y'), 'master'], stdout=PIPE).stdout)
-
 scons_git = os.path.basename(sys.argv[0]) == 'pre-commit'
 if scons_git:
+	# Break immediately if there's no changes
+	if not Popen(['/usr/bin/env', 'git', 'diff',
+		'HEAD', '--quiet'], env=dict()).wait(): sys.exit()
 	scons_hash = hashlib.md5(open('setup.py').read()).hexdigest()\
 		if os.path.exists('setup.py') else ''
+
+ver_minor = sum(1 for i in Popen(['/usr/bin/env', 'git', 'rev-list',
+	'--since=%s'%strftime('01.%m.%Y'), 'master'], stdout=PIPE).stdout)
 
 # Regenerate scons
 open('setup.py', 'w').write(
@@ -31,7 +34,5 @@ if scons_git:
 		Popen(['/usr/bin/env', 'git', 'add', 'setup.py'], env=dict()).wait()
 		sys.exit()
 
-if scons_git:
 	print 'Scons system regenerated, re-initiate commit process manually'
 	sys.exit(1) # Break commit sequence
-else: sys.exit()

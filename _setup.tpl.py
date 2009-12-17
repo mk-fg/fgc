@@ -5,7 +5,7 @@
 from setuptools import setup
 
 setup(
-	name = 'fg_core utility extension',
+	name = 'fgc',
 	version = '{version}',
 	author = 'Mike Kazantsev',
 	author_email = 'mike_kazantsev@fraggod.net',

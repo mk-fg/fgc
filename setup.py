@@ -5,8 +5,8 @@
 from setuptools import setup
 
 setup(
-	name = 'fg_core utility extension',
-	version = '9.12.7',
+	name = 'fgc',
+	version = '9.12.8',
 	author = 'Mike Kazantsev',
 	author_email = 'mike_kazantsev@fraggod.net',
 	description = ( 'Miscellaneous tools to soften stdlib shortcomings'
