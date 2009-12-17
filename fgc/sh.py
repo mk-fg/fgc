@@ -433,7 +433,7 @@ class LockError(EnvironmentError):
 
 class flock(object):
 	'''Filesystem lock'''
-	__slots__ = ('locked', '_lock', '_shared', '_del')
+	gc_unlock = True
 
 	@property
 	def _type(self): return fcntl.LOCK_EX if not self._shared else fcntl.LOCK_SH
@@ -493,8 +493,9 @@ class flock(object):
 		return self
 
 	def __del__(self):
-		self.release()
-		if self._del: rm(self._del, onerror=False)
+		if self.gc_unlock:
+			self.release()
+			if self._del: rm(self._del, onerror=False)
 
 	__str__ = __repr__ = __hash__ = lambda s: '<FileLock %s>'%s._lock
 	def __enter__(self): return self.acquire()
