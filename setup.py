@@ -4,7 +4,7 @@ from setuptools import setup
 
 setup(
 	name = 'fg_core utility extension',
-	version = '9.12.4',
+	version = '9.12.5',
 	author = 'Mike Kazantsev',
 	author_email = 'mike_kazantsev@fraggod.net',
 	description = ( 'Miscellaneous tools to soften stdlib shortcomings'
