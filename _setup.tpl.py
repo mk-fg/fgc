@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+{warning}
+
 from setuptools import setup
 
 setup(
