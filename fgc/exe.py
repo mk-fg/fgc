@@ -85,6 +85,10 @@ def proc(*argz, **kwz):
 	if kwz.get('env') is True:
 		argz[0] = list(chain('/usr/bin/env', argz[0]))
 		del kwz['env']
+	try:
+		if not kwz.pop('silent'): raise KeyError
+	except KeyError: pass
+	else: kwz['stdout'] = kwz['stderr'] = False
 	for kw in ('stdout', 'stderr'):
 		if kwz.get(kw) is False:
 			if not _void: _void = open('/dev/null', 'w')
