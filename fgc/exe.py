@@ -1,4 +1,4 @@
-from aexec import AExec, Threader, PIPE, Time, Size, End
+from aexec import AExec, PIPE
 from dta import chain
 import os, sys, signal
 
@@ -92,6 +92,7 @@ def proc(*argz, **kwz):
 	proc = AExec(*argz, **kwz)
 	if kwz.get('stdin') is False and proc.stdin: proc.stdin.close()
 	return proc
+
 
 def pipe(*argz, **kwz):
 	nkwz = dict(stdin=PIPE, stdout=PIPE, stderr=PIPE)

@@ -169,14 +169,34 @@ class FileBridge(object):
 	__getattr__ = lambda s,k: getattr(s.__src,k)
 
 
+
 import signal
 
 class AExec(Popen):
+	_ctl = None
+
 	def __init__(self, *argz, **kwz): # keywords aren't used yet
-		if len(argz) == 1: argz = (argz[0],) if isinstance(argz[0], (str, unicode, buffer)) else argz[0]
+		if len(argz) == 1:
+			argz = (argz[0],) if isinstance(
+				argz[0], (str, unicode, buffer)) else argz[0]
+		self._cmdline = argz[0]
+
 		try: sync = kwz.pop('sync')
-		except KeyError: sync = True
+		except KeyError: sync = True # yes, no async i/o by default
+
+		try:
+			if not kwz.pop('ctl'): raise KeyError
+		except KeyError: child_ctl = None
+		else:
+			self._ctl, child_ctl = os.pipe() # control descriptor to monitor process exit
+			kwz['preexec_fn'] = (lambda: os.close(self._ctl) or kwz['preexec_fn']) \
+				if 'preexec_fn' in kwz else (lambda: os.close(self._ctl))
+
 		super(AExec, self).__init__(argz, **kwz) # argz aren't expanded on purpose!
+
+		if child_ctl: os.close(child_ctl) # close child-side control descriptor
+		if kwz.get('stdin') is False and self.stdin: self.stdin.close()
+
 		# FileBridge is necessary to stop gc from destroying other side of fd's by collecting this object
 		bridge = AWrapper if not sync else FileBridge
 		if self.stdin:
@@ -188,6 +208,8 @@ class AExec(Popen):
 		if self.stderr:
 			self.stderr = bridge(self.stderr, self)
 			self.read_err = self.stderr.read
+
+	def fileno(self): return self._ctl
 
 	def wait(self, to=-1):
 		if to > 0:
@@ -204,6 +226,7 @@ class AExec(Popen):
 					signal.alarm(0)
 					os.kill(os.getpid(), signal.SIGALRM)
 			else: signal.alarm(0)
+		elif to == 0: status = super(AExec, self).poll()
 		else: status = super(AExec, self).wait()
 		return status
 
@@ -232,3 +255,6 @@ class AExec(Popen):
 		self.stdin.flush()
 	def readline(self): return self.stdout.readline() # TODO: make it compatible w/ AWrapper
 
+	def __iter__(self): return iter(self.stdout)
+	def __str__(self): return '<subprocess %s: "%s">'%(self.pid, ' '.join(self._cmdline))
+	__repr__ = __str__
