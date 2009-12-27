@@ -2,7 +2,7 @@
 
 {warning}
 
-from setuptools import setup
+from setuptools import setup, find_packages, Extension
 
 setup(
 	name = 'fgc',
@@ -14,9 +14,13 @@ setup(
 	license = 'BSD',
 	keywords = 'swiss utility misc wrappers extension convenience',
 	url = 'http://fraggod.net/oss/fgc',
-	packages = ['fgc'],
+	packages = find_packages(),
+	include_package_data=True,
 	long_description = 'Not really ;)',
+	# install_requires=['pyyaml'], not really ;)
 	classifiers = [
 		'Development Status :: Eternal Alpha',
 		'Topic :: Utilities',
-		'License :: OSI Approved :: BSD License' ] )
+		'License :: OSI Approved :: BSD License' ],
+	ext_modules  = [
+		Extension(name='fgc.psctl', sources=['fgc/psctl.c'], include_dirs=['/usr/src/linux/include']) ] )

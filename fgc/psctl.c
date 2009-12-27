@@ -80,7 +80,7 @@ psctl_name_get(PyObject *self, PyObject *args) { // (bool) from_cmdline
 		unsigned int pid = getpid();
 		sprintf(cmdline_path, "/proc/%d/cmdline", pid);
 		FILE *cmdline_file =  fopen(cmdline_path, "r");
-		fgets(name, sizeof(name), cmdline_file);
+		if (!fgets(name, sizeof(name), cmdline_file)) return NULL;
 		fclose(cmdline_file); }
 
 	return Py_BuildValue("s", name); };
