@@ -16,13 +16,18 @@ static PyObject *
 psctl_securebits_set(PyObject *self, PyObject *args) { // (int) bitmask
 	int bitmask;
 	if (!PyArg_ParseTuple(args, "i", &bitmask)) return NULL;
-	prctl(PR_SET_SECUREBITS, bitmask, 0, 0, 0);
-	Py_INCREF(Py_None);
-	return Py_None; };
+	if (prctl(PR_SET_SECUREBITS, bitmask, 0, 0, 0) == -1) {
+		PyErr_SetString(PyExc_OSError, strerror(errno));
+		return NULL; }
+	Py_RETURN_NONE; };
 
 static PyObject *
 psctl_securebits_get(PyObject *self, PyObject *args) { // no args
-	return Py_BuildValue("i", prctl(PR_GET_SECUREBITS, 0, 0, 0, 0)); };
+	int bitmask;
+	if ((bitmask = prctl(PR_GET_SECUREBITS, 0, 0, 0, 0)) == -1) {
+		PyErr_SetString(PyExc_OSError, strerror(errno));
+		return NULL; }
+	return Py_BuildValue("i", bitmask); };
 
 
 static PyObject *
@@ -31,7 +36,9 @@ psctl_name_set(PyObject *self, PyObject *args) { // (str) name, (bool) update_cm
 	if (!PyArg_ParseTuple(args, "s|O", &name, &update_cmdline)) return NULL;
 
 	// Update thread name
-	prctl(PR_SET_NAME, name, 0, 0, 0);
+	if (prctl(PR_SET_NAME, name, 0, 0, 0) == -1) {
+		PyErr_SetString(PyExc_OSError, strerror(errno));
+		return NULL; }
 
 	// Update cmdline
 	// Implementation is copy-pasted from setproctitle.c in util-linux-ng
@@ -65,8 +72,7 @@ psctl_name_set(PyObject *self, PyObject *args) { // (str) name, (bool) update_cm
 			(void) strcpy(argv0[0], name);
 			argv0[1] = NULL; } }
 
-	Py_INCREF(Py_None);
-	return Py_None; };
+	Py_RETURN_NONE; };
 
 static PyObject *
 psctl_name_get(PyObject *self, PyObject *args) { // (bool) from_cmdline
@@ -74,14 +80,22 @@ psctl_name_get(PyObject *self, PyObject *args) { // (bool) from_cmdline
 	if (!PyArg_ParseTuple(args, "|O", &from_cmdline)) return NULL;
 
 	char name[PAGE_SIZE];
-	if (PyObject_Not(from_cmdline)) prctl(PR_GET_NAME, &name, 0, 0, 0); // returns at most 16 bytes ;(
+	if (PyObject_Not(from_cmdline)) {
+		if (prctl(PR_GET_NAME, &name, 0, 0, 0) == -1) { // returns at most 16 bytes ;(
+			PyErr_SetString(PyExc_OSError, strerror(errno));
+			return NULL; } }
 	else {
 		char cmdline_path[PATH_MAX];
 		unsigned int pid = getpid();
 		sprintf(cmdline_path, "/proc/%d/cmdline", pid);
-		FILE *cmdline_file =  fopen(cmdline_path, "r");
-		if (!fgets(name, sizeof(name), cmdline_file)) return NULL;
-		fclose(cmdline_file); }
+		FILE *cmdline_file;
+		if ((cmdline_file =  fopen(cmdline_path, "r")) == NULL) {
+			PyErr_SetString(PyExc_OSError, strerror(errno));
+			return NULL; }
+		if (!fgets(name, sizeof(name), cmdline_file)) {
+			PyErr_SetString(PyExc_IOError, strerror(errno));
+			return NULL; }
+		(void) fclose(cmdline_file); }
 
 	return Py_BuildValue("s", name); };
 
