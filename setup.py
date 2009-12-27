@@ -6,7 +6,7 @@ from setuptools import setup, find_packages, Extension
 
 setup(
 	name = 'fgc',
-	version = '9.12.10',
+	version = '9.12.11',
 	author = 'Mike Kazantsev',
 	author_email = 'mike_kazantsev@fraggod.net',
 	description = ( 'Miscellaneous tools to soften stdlib shortcomings'
@@ -23,4 +23,4 @@ setup(
 		'Topic :: Utilities',
 		'License :: OSI Approved :: BSD License' ],
 	ext_modules  = [
-		Extension(name='fgc.psctl', sources=['fgc/psctl.c'], include_dirs=['/usr/src/linux/include']) ] )
+		Extension(name='fgc.psctl', sources=['psctl.c'], include_dirs=['/usr/src/linux/include']) ] )
