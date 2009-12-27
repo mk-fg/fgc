@@ -137,8 +137,7 @@ def perm_apply():
 	errz = False
 	try: os.chmod(cfg.ownage.file, int(oct(cfg.ownage.mode), 8))
 	except OSError: log.error('Unable to change mode for %s file'%cfg.ownage.file)
-	for line in it.ifilter(None, it.imap(
-			op.methodcaller('strip', spaces), open(cfg.ownage.file) )):
+	for line in it.ifilter(None, (line.strip(spaces) for line in open(cfg.ownage.file))):
 		path, caps = line.rsplit(' ', 1)
 		if ':' in caps: ownage, caps = caps, None
 		else: path, ownage = path.rsplit(' ', 1)
