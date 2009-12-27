@@ -116,11 +116,11 @@ def perm_gen():
 			path[0] = os.path.join(path[0], path.pop(1))
 	if ownage:
 		ownage = ''.join( '%s %s\n'%(path, own) for path,own in
-			sorted(ownage.iteritems(), key=op.itemgetter(0)) )
+			sorted(ownage.iteritems(), key=op.itemgetter(0)) ) + '\n'
 		try: old_ownage = open(cfg.ownage.file).read()
 		except IOError: old_ownage = None
 		if old_ownage != ownage:
-			open(cfg.ownage.file, 'w').write(ownage + '\n')
+			open(cfg.ownage.file, 'w').write(ownage)
 			os.chmod(cfg.ownage.file, int(oct(cfg.ownage.mode), 8))
 			log.info('Updated ownership information')
 		if old_ownage is None: exe.add((cfg.bin.git, 'add', cfg.ownage.file), block=True)
