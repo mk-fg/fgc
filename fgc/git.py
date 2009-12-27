@@ -140,7 +140,7 @@ def perm_apply():
 	for line in it.ifilter(None, it.imap(
 			op.methodcaller('strip', spaces), open(cfg.ownage.file) )):
 		path, caps = line.rsplit(' ', 1)
-		if caps.isdigit(): ownage, caps = caps, None
+		if ':' in caps: ownage, caps = caps, None
 		else: path, ownage = path.rsplit(' ', 1)
 		try: uid, gid, mode = ownage.split(':', 2)
 		except ValueError: uid, gid = ownage.split(':', 1) # Deprecated format w/o mode
@@ -154,7 +154,7 @@ def perm_apply():
 				if not os.path.islink(path): os.chmod(path, int(mode, 8))
 			if caps:
 				caps = caps.replace('/', ' ')
-				try: caps.set(path, caps)
+				try: strcaps.set(path, caps)
 				except OSError:
 					log.warn('Unable to set posix caps %r for path %s'%(caps, path))
 		except OSError:
