@@ -1,6 +1,6 @@
+import itertools as it, operator as op, functools as ft
 from string import whitespace as spaces
 from fgc import log, sh, dta, exe
-import itertools as it, operator as op, functools as ft
 import os, sys, re
 
 
@@ -85,10 +85,13 @@ def exc(*argz, **kwz):
 	return exe.proc(*argz, **kwz)
 
 
+from fgc import strcaps
+
 def perm_gen():
-	'''Permissions' information file ('path uid:gid\n' format) generator'''
+	'''Permissions information file ('path uid:gid\n' format) generator'''
 	numeric = cfg.ownage.use_ids
-	if cfg.ownage.omit: return log.warn('Omit permissions flag is set, skipping FS metadata changes')
+	if cfg.ownage.omit:
+		return log.warn('Omit_permissions flag is set, skipping FS metadata changes')
 	ownage = {}
 	errz = False
 	for path in ls_files():
@@ -97,16 +100,18 @@ def perm_gen():
 		path = path.split(os.sep)
 		while True:
 			if path[0] not in ownage:
-				try:
-					fstat = os.lstat(path[0])
-					ownage[path[0]] = '%s:%s:%s'%(
-						fstat.st_uid if numeric else sh.uname(fstat.st_uid),
-						fstat.st_gid if numeric else sh.gname(fstat.st_gid),
-						oct(fstat.st_mode & 07777) # can produce likes of 04755
-					)
+				try: fstat = os.lstat(path[0])
 				except OSError:
 					log.error('Unable to stat path: %s'%path[0])
 					errz = True
+				else:
+					ownage[path[0]] = '%s:%s:%s'%(
+						fstat.st_uid if numeric else sh.uname(fstat.st_uid),
+						fstat.st_gid if numeric else sh.gname(fstat.st_gid),
+						oct(fstat.st_mode & 07777).lstrip('0') ) # can produce likes of 04755
+					try: caps = strcaps.get(path[0])
+					except OSError: caps = None # no kernel/fs support
+					if caps: ownage[path[0]] += ' %s'%caps.replace(' ', '/')
 			if len(path) == 1: break
 			path[0] = os.path.join(path[0], path.pop(1))
 	if ownage:
@@ -115,7 +120,7 @@ def perm_gen():
 		try: old_ownage = open(cfg.ownage.file).read()
 		except IOError: old_ownage = None
 		if old_ownage != ownage:
-			open(cfg.ownage.file, 'w').write(ownage)
+			open(cfg.ownage.file, 'w').write(ownage + '\n')
 			os.chmod(cfg.ownage.file, int(oct(cfg.ownage.mode), 8))
 			log.info('Updated ownership information')
 		if old_ownage is None: exe.add((cfg.bin.git, 'add', cfg.ownage.file), block=True)
@@ -132,8 +137,11 @@ def perm_apply():
 	errz = False
 	try: os.chmod(cfg.ownage.file, int(oct(cfg.ownage.mode), 8))
 	except OSError: log.error('Unable to change mode for %s file'%cfg.ownage.file)
-	for line in open(cfg.ownage.file):
-		path, ownage = line.rsplit(' ', 1)
+	for line in it.ifilter(None, it.imap(
+			op.methodcaller('strip', spaces), open(cfg.ownage.file) )):
+		path, caps = line.rsplit(' ', 1)
+		if caps.isdigit(): ownage, caps = caps, None
+		else: path, ownage = path.rsplit(' ', 1)
 		try: uid, gid, mode = ownage.split(':', 2)
 		except ValueError: uid, gid = ownage.split(':', 1) # Deprecated format w/o mode
 		try:
@@ -144,6 +152,11 @@ def perm_apply():
 			try: os.lchmod(path, int(mode, 8)) # py2.6+ only
 			except AttributeError:
 				if not os.path.islink(path): os.chmod(path, int(mode, 8))
+			if caps:
+				caps = caps.replace('/', ' ')
+				try: caps.set(path, caps)
+				except OSError:
+					log.warn('Unable to set posix caps %r for path %s'%(caps, path))
 		except OSError:
 			errz = True
 			log.error('Unable to set permissions %s for path %s'%(ownage, path))
