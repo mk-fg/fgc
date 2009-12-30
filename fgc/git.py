@@ -113,7 +113,7 @@ def perm_gen():
 						fstat.st_uid if numeric else sh.uname(fstat.st_uid),
 						fstat.st_gid if numeric else sh.gname(fstat.st_gid),
 						oct(fstat.st_mode & 07777).lstrip('0') ) # can produce likes of 04755
-					try: caps = strcaps.get(path[0])
+					try: caps = strcaps.get_file(path[0])
 					except OSError: caps = None # no kernel/fs support
 					if caps: ownage[path[0]] += ' %s'%caps.replace(' ', '/')
 			if len(path) == 1: break
@@ -167,7 +167,7 @@ def perm_apply():
 			sh.chmod(path, int(mode, 8), deference=False)
 			if caps:
 				caps = caps.replace('/', ' ')
-				try: strcaps.set(path, caps)
+				try: strcaps.set_file(caps, path)
 				except OSError:
 					errz = True
 					log.warn('Unable to set posix caps %r for path %s'%(caps, path))

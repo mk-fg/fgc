@@ -27,16 +27,11 @@ strcaps_get_file(PyObject *self, PyObject *args) { // (int) fd / (str) path / (f
 
 static PyObject *
 strcaps_get_process(PyObject *self, PyObject *args) { // (int) pid or None
-	PyObject *pid;
-	if (!PyArg_ParseTuple(args, "|O", &pid)) return NULL;
+	int pid = 0;
+	if (!PyArg_ParseTuple(args, "|i", &pid)) return NULL;
 	cap_t caps;
-	if (PyObject_Not(pid)) caps = cap_get_proc();
-	else {
-		if (PyInt_Check(pid)) caps = cap_get_pid(PyInt_AsLong(pid));
-		else {
-			PyErr_SetString( PyExc_TypeError,
-				"Expecting process pid as integer or None" );
-			return NULL; } }
+	if (!pid) caps = cap_get_proc();
+	else caps = cap_get_pid(pid);
 	int strcaps_len; char *strcaps;
 	if (caps == NULL) {
 		if (errno == ENODATA) { strcaps = "\0"; strcaps_len = 0; }
@@ -70,20 +65,15 @@ strcaps_set_file(PyObject *self, PyObject *args) { // (str) caps, (int) fd / (st
 
 static PyObject *
 strcaps_set_process(PyObject *self, PyObject *args) { // (str) caps, (int) pid or None
-	char *strcaps; PyObject *pid;
-	if (!PyArg_ParseTuple(args, "s|O", &strcaps, &pid)) return NULL;
+	char *strcaps; int pid = 0;
+	if (!PyArg_ParseTuple(args, "s|i", &strcaps, &pid)) return NULL;
 	cap_t caps;
 	if ((caps = cap_from_text(strcaps)) == NULL) {
 		PyErr_SetString(PyExc_ValueError, "Invalid capability specification");
 		return NULL; }
 	int err;
-	if (PyObject_Not(pid)) err = cap_set_proc(caps);
-	else {
-		if (PyInt_Check(pid)) err = capsetp(PyInt_AsLong(pid), caps);
-		else {
-			PyErr_SetString( PyExc_TypeError,
-				"Expecting process pid as integer or None" );
-			return NULL; } }
+	if (!pid) err = cap_set_proc(caps);
+	else err = capsetp(pid, caps);
 	if (err) {
 		PyErr_SetString(PyExc_OSError, strerror(errno));
 		return NULL; }
