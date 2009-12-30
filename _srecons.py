@@ -7,13 +7,25 @@ import os, sys, hashlib
 scons_git = os.path.basename(sys.argv[0]) == 'pre-commit'
 if scons_git:
 	# Break immediately if there's no changes
-	if not Popen(['/usr/bin/env', 'git', 'diff',
-		'HEAD', '--quiet'], env=dict()).wait(): sys.exit()
+	if not Popen(['git', 'diff', 'HEAD', '--quiet'], env=dict()).wait(): sys.exit()
 	scons_hash = hashlib.md5(open('setup.py').read()).hexdigest()\
-		if os.path.exists('setup.py') else ''
+		 if os.path.exists('setup.py') else ''
 
-ver_minor = sum(1 for i in Popen(['/usr/bin/env', 'git', 'rev-list',
-	'--since=%s'%strftime('01.%m.%Y'), 'master'], stdout=PIPE).stdout)
+ver_minor = sum( 1 for i in Popen(['git', 'rev-list',
+	'--since=%s'%strftime('01.%m.%Y'), 'master'], stdout=PIPE).stdout )
+
+# Check for lame syntax errors
+from string import whitespace as spaces
+import py_compile
+for src in ( line.strip(spaces) for line in
+		Popen(['find', '-name', '*.py', '-print'], stdout=PIPE).stdout ):
+	if src.endswith('.tpl.py'): continue # templates are, by definition, incomplete
+	try: py_compile.compile(src, cfile='/dev/null', doraise=True)
+	except py_compile.PyCompileError, err:
+		print '{0} (file: {1}):\n\t{2}'.format(err.exc_type_name, err.file, err.exc_value)
+		from od import do
+		do(err)
+		sys.exit(1)
 
 # Regenerate scons
 open('setup.py', 'w').write(
@@ -31,7 +43,7 @@ if scons_git:
 		while True:
 			if os.path.exists('.git/index.lock'): sleep(0.2)
 			else: break
-		Popen(['/usr/bin/env', 'git', 'add', 'setup.py'], env=dict()).wait()
+		Popen(['git', 'add', 'setup.py'], env=dict()).wait()
 		sys.exit()
 
 	print 'Scons system regenerated, re-initiate commit process manually'

@@ -53,7 +53,7 @@ def mode(mode):
 			0010, # --- --x ---
 			0004, # --- --- r--
 			0002, # --- --- -w-
-			0001  # --- --- --x )
+			0001 )# --- --- --x
 		for n in xrange(len(bits)):
 			if mode[n] != '-': val |= bits[n]
 		return val
