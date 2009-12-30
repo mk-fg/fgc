@@ -23,8 +23,6 @@ for src in ( line.strip(spaces) for line in
 	try: py_compile.compile(src, cfile='/dev/null', doraise=True)
 	except py_compile.PyCompileError, err:
 		print '{0} (file: {1}):\n\t{2}'.format(err.exc_type_name, err.file, err.exc_value)
-		from od import do
-		do(err)
 		sys.exit(1)
 
 # Regenerate scons
