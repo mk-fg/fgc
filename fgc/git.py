@@ -11,9 +11,9 @@ try:
 	del sys.argv[arg_idx]
 	cfg_dir = sys.argv[arg_idx]
 	del sys.argv[arg_idx], arg_idx
-except (IndexError, ValueError): cfg_dir = os.path.join(cfgit, 'cfgit')
+except (IndexError, ValueError): cfg_dir = sh.join(cfgit, 'cfgit')
 # Read cfg or die
-try: cfg = dta.do(os.path.join(cfg_dir, 'config.yaml'))
+try: cfg = dta.do(sh.join(cfg_dir, 'config.yaml'))
 except Exception as ex: log.fatal('Configuration error: %s'%ex, crash=1)
 
 
@@ -29,12 +29,12 @@ class GitCfg(ConfigParser, file):
 	def write(self, data): raise NotImplementedError('Write to gitconfig is not implemented yet')
 
 
-def update_idx(): exe.add((cfg.bin.git, 'update-index', '--refresh'), block=True)
+def update_idx(): exe.proc(cfg.bin.git, 'update-index', '--refresh').wait()
 
 
 def merge():
 	'''Interactive merge operation'''
-	conflicts = []
+	conflicts = list()
 	git = exc(stdout=exe.PIPE, stderr=exe.PIPE)
 	rec = re.compile('conflict in (.*)')
 	for line in git.stdout:
@@ -52,12 +52,12 @@ def merge():
 			if os.path.exists(file): os.unlink(file)
 	updates = []
 	for file in conflicts:
-		updates += [
+		updates += list(
 			os.path.abspath(rel).replace("'", "'\\''")
-			for rel in sh.glob( os.path.join(os.path.dirname(file), '._upd??_'+os.path.basename(file)) )
-		]
+			for rel in sh.glob(sh.join(
+				os.path.dirname(file), '._upd??_'+os.path.basename(file) )) )
 	for line in git.stderr: log.error(line)
-	if updates: return exe.add(tuple(data.chain(cfg.bin.decay, '--', updates)), sys=True)
+	if updates: return exe.proc(*data.chain(cfg.bin.decay, '--', updates)).wait_cli()
 
 
 def clone():
@@ -71,17 +71,21 @@ def clone():
 	perm_apply()
 
 
+from time import sleep
+
 def ls_files(sort=True):
 	files = None
-	while not files: # aw, fuck it! (dirty hack for nasty bug)
-		files = exe.pipe((cfg.bin.git, 'ls-files', '--full-name')).stdout.readlines()
+	while True: # aw, fuck it! (dirty hack for nasty bug)
+		files = exe.pipe(cfg.bin.git, 'ls-files', '--full-name').stdout.readlines()
+		if files: break
+		else: sleep(0.1)
 	return sorted(files) if sort else files
 
 
 def exc(*argz, **kwz):
 	if not argz:
-		argz = [list(dta.overlap([cfg.bin.git], sys.argv))]
-		if not kwz: return exe.add(*argz, sys=True)
+		argz = list(dta.overlap([cfg.bin.git], sys.argv))
+		if not kwz: return exe.proc(*argz).wait_cli()
 	return exe.proc(*argz, **kwz)
 
 
@@ -113,7 +117,7 @@ def perm_gen():
 					except OSError: caps = None # no kernel/fs support
 					if caps: ownage[path[0]] += ' %s'%caps.replace(' ', '/')
 			if len(path) == 1: break
-			path[0] = os.path.join(path[0], path.pop(1))
+			path[0] = sh.join(path[0], path.pop(1))
 	if ownage:
 		ownage = ''.join( '%s %s\n'%(path, own) for path,own in
 			sorted(ownage.iteritems(), key=op.itemgetter(0)) ) + '\n'
@@ -121,9 +125,9 @@ def perm_gen():
 		except IOError: old_ownage = None
 		if old_ownage != ownage:
 			open(cfg.ownage.file, 'w').write(ownage)
-			os.chmod(cfg.ownage.file, int(oct(cfg.ownage.mode), 8))
+			sh.chmod(cfg.ownage.file, int(oct(cfg.ownage.mode), 8))
 			log.info('Updated ownership information')
-		if old_ownage is None: exe.add((cfg.bin.git, 'add', cfg.ownage.file), block=True)
+		if old_ownage is None: exe.proc(cfg.bin.git, 'add', cfg.ownage.file).wait()
 	else: log.info('No files given to harvest ownership info')
 	if errz:
 		log.warn('Execution halted because of errors, send \\n or break it.')
@@ -135,7 +139,7 @@ def perm_apply():
 	if not os.path.lexists(cfg.ownage.file): return log.warn('No ownership info stored')
 	log.info('Setting ownership...')
 	errz = False
-	try: os.chmod(cfg.ownage.file, int(oct(cfg.ownage.mode), 8))
+	try: sh.chmod(cfg.ownage.file, int(oct(cfg.ownage.mode), 8))
 	except OSError: log.error('Unable to change mode for %s file'%cfg.ownage.file)
 	for line in it.ifilter(None, (line.strip(spaces) for line in open(cfg.ownage.file))):
 		path, caps = line.rsplit(' ', 1)
@@ -144,17 +148,16 @@ def perm_apply():
 		try: uid, gid, mode = ownage.split(':', 2)
 		except ValueError: uid, gid = ownage.split(':', 1) # Deprecated format w/o mode
 		try:
-			try: os.lchown(path, sh.uid(uid), sh.gid(gid))
+			try: sh.chown(path, uid, gid, resolve=True)
 			except KeyError:
-				log.error('No such id - %s:%s (%s)'%(uid,gid,path))
 				errz = True
-			try: os.lchmod(path, int(mode, 8)) # py2.6+ only
-			except AttributeError:
-				if not os.path.islink(path): os.chmod(path, int(mode, 8))
+				log.error('No such id - %s:%s (%s)'%(uid,gid,path))
+			sh.chmod(path, int(mode, 8), deference=False)
 			if caps:
 				caps = caps.replace('/', ' ')
 				try: strcaps.set(path, caps)
 				except OSError:
+					errz = True
 					log.warn('Unable to set posix caps %r for path %s'%(caps, path))
 		except OSError:
 			errz = True

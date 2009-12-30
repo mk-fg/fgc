@@ -1,75 +1,23 @@
-import itertools as it, operator as op, functools as ft
-from threading import Thread, BoundedSemaphore
-import os, sys, Queue
-
-
-class Threader(object):
-	def __init__(self, process=1, results=None, timeout=5):
-		self._threads = list()
-		self._threads_limit = process if process > 0 else None
-		if isinstance(results, int):
-			if self._threads_limit: results -= process
-			if results <= 0: raise ValueError('Results limit must be higher than processing limit')
-			self._results = Queue.Queue(results)
-		elif results is None: self._results = Queue.Queue()
-		else: self._results = results # custom object
-		self._feed = Queue.Queue()
-		self._next = ft.partial(self.get, timeout=timeout)
-
-	def _worker(self):
-		while True:
-			try: idx, task = self._feed.get()
-			except TypeError: # poison
-				self._feed.task_done()
-				break
-			try: self._results.put( (idx, task()) )
-			finally: self._feed.task_done() # even if task fails
-
-	def get(self, *argz, **kwz):
-		if not self._feed.unfinished_tasks and self._results.empty(): self.close(True)
-		if not argz: # handle standard queue "block" argument
-			try: argz = [bool(kwz['timeout'] or True)] # (timeout is 0/False) = block
-			except: argz = [True]
-		try: return self._results.get(*argz, **kwz) # so get can be overridden in results
-		except Queue.Empty: self.close(True) # for standard results queue, in case of timeout
-	def put(self, task):
-		if not self._threads_limit or len(self._threads) < self._threads_limit:
-			thread = Thread(target=self._worker)
-			thread.setDaemon(True)
-			thread.start()
-			self._threads.append(thread)
-		self._feed.put(task)
-
-	def _lock(self, *argz, **kwz): raise StopIteration
-	def close(self, iter=False):
-		self.put = self.get = self._lock # block any further I/O
-		for i in xrange(len(self._threads)): self._feed.put(None) # poison all threads
-		while self._threads: self._threads.pop().join(0) # collect the cadavers, if not hung
-		if iter: raise StopIteration
-
-	get_nowait = ft.partial(get, to=0)
-	put_nowait = ft.partial(put, to=0)
-
-	def __del__(self):
-		if self._threads:
-			for i in xrange(len(self._threads)): self._feed.put(None) # poison all threads
-			while self._threads: self._threads.pop().join() # collect the cadavers
-
-	next = lambda s: s._next()
-	__iter__ = lambda s: s
-
-
-
-
 from subprocess import Popen, PIPE
-from select import epoll, EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP
-import errno, fcntl
+import os, errno, fcntl
 from time import time
+
+try: # yuck, but epoll just seem to be preferred choice
+	from select import epoll as poll,\
+		EPOLLIN as POLLIN,\
+		EPOLLOUT as POLLOUT,\
+		EPOLLERR as POLLERR,\
+		EPOLLHUP as POLLHUP
+except ImportError:
+	from select import poll,\
+		POLLIN, POLLOUT, POLLERR, POLLHUP
+
 
 # Exit conditions (states)
 class Time: pass # hit-the-time-limit state
 class Size: pass # hit-the-size-limit state
 class End: pass # hit-the-end state
+
 
 class AWrapper(object):
 	'''Async I/O objects wrapper'''
@@ -80,9 +28,9 @@ class AWrapper(object):
 	def __init__(self, pipe, leash=None):
 		fd = self._fd = pipe.fileno()
 		if leash: self.__leash = leash # fd source object, leashed here to stop gc
-		self._poll_in, self._poll_out = epoll(), epoll()
-		self._poll_in.register(fd, EPOLLIN | EPOLLERR | EPOLLHUP)
-		self._poll_out.register(fd, EPOLLOUT | EPOLLERR | EPOLLHUP)
+		self._poll_in, self._poll_out = poll(), poll()
+		self._poll_in.register(fd, POLLIN)
+		self._poll_out.register(fd, POLLOUT)
 		self.close = pipe.close
 		try: # file
 			self.reads = pipe.read
@@ -111,10 +59,10 @@ class AWrapper(object):
 				except IndexError:
 					if state: state = Time
 					break
-				if event != EPOLLHUP: # some data or error present
+				if event != POLLHUP: # some data or error present
 					ext = self.reads(min(bs, self.bs_max) if bs > 0 else self.bs_default) # min() for G+ reads
 					buff += ext
-				if event & EPOLLHUP: # socket is closed on the other end
+				if event & POLLHUP: # socket is closed on the other end
 					if state: state = End
 					break
 				to = deadline - time()
@@ -144,10 +92,10 @@ class AWrapper(object):
 				except IndexError:
 					if state: state = Time
 					break
-				if event != EPOLLHUP:
+				if event != POLLHUP:
 					ext = os.write(fd, buff)
 					bs += ext
-				if event & EPOLLHUP:
+				if event & POLLHUP:
 					if state: state = End
 					break
 				to = deadline - time()
@@ -159,6 +107,7 @@ class AWrapper(object):
 			try: fcntl.fcntl(self._fd, fcntl.F_SETFL, flags)
 			except: pass
 		return bs if not state else (bs, state)
+
 
 
 class FileBridge(object):
@@ -230,6 +179,13 @@ class AExec(Popen):
 		else: status = super(AExec, self).wait()
 		return status
 
+	def wait_cli(self, to=-1):
+		'Guarded wait that passes SIGINT to process first'
+		try: return ps.wait(to)
+		except KeyboardInterrupt, ex:
+			os.kill(ps.pid, signal.SIGINT)
+			ps.wait(to) # second SIGINT will kill python
+
 	def close(self, to=-1, to_sever=3):
 		try:
 			if self.stdin: # try to strangle it
@@ -258,3 +214,4 @@ class AExec(Popen):
 	def __iter__(self): return iter(self.stdout)
 	def __str__(self): return '<subprocess %s: "%s">'%(self.pid, ' '.join(self._cmdline))
 	__repr__ = __str__
+

@@ -6,7 +6,7 @@ Optimized and simplified a lot, since original implementation was rubbish.
 '''
 
 import os, sys, stat, re, pwd, grp
-from os.path import join
+from os.path import join, islink
 from os import walk, rmdir
 import log
 
@@ -18,20 +18,25 @@ class Error(EnvironmentError):
 
 def getids(user): return uid(user), gid(user)
 def resolve_ids(tuid=-1, tgid=-1):
-	if tuid != -1 and ':' in tuid: tuid, tgid = tuid.split(':')
+	if tuid != -1 and tgid == -1 and ':' in tuid: # user:group spec
+		tuid, tgid = tuid.split(':')
 	return uid(tuid), gid(tgid)
+
 def uid(user):
 	try: return int(user)
-	except ValueError: return pwd.getpwnam(user).pw_uid
+	except ValueError:
+		return pwd.getpwnam(user).pw_uid
 def gid(group):
 	try: return int(group)
-	except ValueError: return grp.getgrnam(group).gr_gid
+	except ValueError:
+		return grp.getgrnam(group).gr_gid
 def uname(uid):
 	try: return pwd.getpwuid(uid).pw_name
 	except KeyError: return uid
 def gname(gid):
 	try: return grp.getgrgid(gid).gr_name
 	except KeyError: return gid
+
 def mode(mode):
 	if mode.isdigit():
 		if len(mode) < 4: mode = '0'+mode
@@ -48,8 +53,7 @@ def mode(mode):
 			0010, # --- --x ---
 			0004, # --- --- r--
 			0002, # --- --- -w-
-			0001 # --- --- --x
-		)
+			0001  # --- --- --x )
 		for n in xrange(len(bits)):
 			if mode[n] != '-': val |= bits[n]
 		return val
@@ -57,15 +61,19 @@ def mode(mode):
 		raise Error, 'Unrecognized file system mode format: %s'%mode
 
 
-def chown(path, tuid=-1, tgid=-1, recursive=False, deference=True, resolve=False):
+def chown(path, tuid=-1, tgid=-1,
+		recursive=False, deference=True, resolve=False):
 	if resolve: tuid, tgid = resolve_ids(tuid, tgid)
 	op = os.chown if deference else os.lchown
 	if recursive:
 		for node in it.imap(ft.partial(join, path), crawl(path, dirs=True)): op(node, tuid, tgid)
 	op(path, tuid, tgid)
-def chmod(path, mode, deference=True):
-	if deference: os.chmod(path, mode)
-	else: os.lchmod(path, mode)
+def chmod(path, bits, deference=True):
+	if deference: os.chmod(path, bits)
+	else:
+		try: os.lchmod(path, bits)
+		except AttributeError: # no support for symlink modes
+			if not islink(path): os.chmod(path, bits)
 
 
 def cat(fsrc, fdst, length=16*1024, recode=None, sync=False):
@@ -122,7 +130,7 @@ def cp_stat(src, dst, attrz=False, deference=True, skip_ts=False):
 		try:
 			chmod = os.lchmod # py 2.6 only
 		except AttributeError:
-			if os.path.islink(dst):
+			if islink(dst):
 				chmod = lambda dst,mode: True # don't change any modes
 			else: chmod = os.chmod
 		chown = os.lchown
@@ -138,7 +146,7 @@ cp_p = lambda src,dst: cp(src, dst, attrz=True)
 
 def cp_d(src, dst, symlinks=False, attrz=False):
 	'''Copy only one node, whatever it is.'''
-	if symlinks and os.path.islink(src):
+	if symlinks and islink(src):
 		src_node = os.readlink(src)
 		os.symlink(src_node, dst)
 	elif os.path.isdir(src):
@@ -299,8 +307,11 @@ def mkdir(path, mode=0755, tuid=-1, tgid=-1, recursive=False, resolve=False):
 def ln(src, dst, hard=False, recursive=False):
 	'''Create a link'''
 	if recursive:
+		# Quite confusing flag
+		# It means just to create dir in which link should reside
 		lnk_dir = os.path.dirname(dst)
-		if not os.path.exists(lnk_dir): mkdir(lnk_dir, recursive=recursive)
+		if not os.path.exists(lnk_dir):
+			mkdir(lnk_dir, recursive=recursive)
 	try:
 		if not hard: os.symlink(src, dst)
 		else: os.link(src, dst)
