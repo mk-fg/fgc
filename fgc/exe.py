@@ -5,7 +5,9 @@ _void = None
 def proc(*argz, **kwz):
 	global _void
 	if isinstance(argz[0], (str, unicode)): argz = [argz]
-	else: argz[0] = list(argz[0])
+	else: # make argz mutable
+		argz = list(argz)
+		argz[0] = list(argz[0])
 	if kwz.get('env') is True:
 		argz[0].insert(0, '/usr/bin/env')
 		del kwz['env']

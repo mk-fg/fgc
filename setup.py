@@ -6,7 +6,7 @@ from setuptools import setup, find_packages, Extension
 
 setup(
 	name = 'fgc',
-	version = '9.12.21',
+	version = '9.12.22',
 	author = 'Mike Kazantsev',
 	author_email = 'mike_kazantsev@fraggod.net',
 	description = ( 'Miscellaneous tools to soften stdlib shortcomings'
