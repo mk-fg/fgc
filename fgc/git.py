@@ -138,15 +138,27 @@ def perm_apply():
 	if cfg.ownage.omit: return log.warn('Omit permissions flag is set, skipping FS metadata changes')
 	if not os.path.lexists(cfg.ownage.file): return log.warn('No ownership info stored')
 	log.info('Setting ownership...')
-	errz = False
+	errz = skip_flag = False
 	try: sh.chmod(cfg.ownage.file, int(oct(cfg.ownage.mode), 8))
 	except OSError: log.error('Unable to change mode for %s file'%cfg.ownage.file)
-	for line in it.ifilter(None, (line.strip(spaces) for line in open(cfg.ownage.file))):
+	for ln, line in enumerate(it.ifilter(
+			None, (line.strip(spaces) for line in open(cfg.ownage.file)) )):
+		if line.startswith('>>>>>>>'):
+			skip_flag = False
+			continue
+		elif line.startswith('<<<<<<<'):
+			skip_flag = True
+			errz = True
+			log.error('Git-merge block detected on line %s'%ln)
+		if skip_flag: continue # git-merge block
+
 		path, caps = line.rsplit(' ', 1)
 		if ':' in caps: ownage, caps = caps, None
 		else: path, ownage = path.rsplit(' ', 1)
 		try: uid, gid, mode = ownage.split(':', 2)
-		except ValueError: uid, gid = ownage.split(':', 1) # Deprecated format w/o mode
+		except ValueError:
+			print line
+			uid, gid = ownage.split(':', 1) # Deprecated format w/o mode
 		try:
 			try: sh.chown(path, uid, gid, resolve=True)
 			except KeyError:

@@ -181,10 +181,12 @@ class AExec(Popen):
 
 	def wait_cli(self, to=-1):
 		'Guarded wait that passes SIGINT to process first'
-		try: return ps.wait(to)
+		if to != -1: deadline = time() + to
+		try: return self.wait(to)
 		except KeyboardInterrupt, ex:
-			os.kill(ps.pid, signal.SIGINT)
-			ps.wait(to) # second SIGINT will kill python
+			os.kill(self.pid, signal.SIGINT)
+			self.wait( min(0, deadline - time())
+				if deadline else to ) # second SIGINT will kill python
 
 	def close(self, to=-1, to_sever=3):
 		try:
