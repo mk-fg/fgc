@@ -4,8 +4,9 @@ from fgc.aio import AExec, PIPE
 _void = None
 def proc(*argz, **kwz):
 	global _void
-	if isinstance(argz[0], (str, unicode)): argz = [argz]
-	else: # make argz mutable
+	if isinstance(argz[0], (str, unicode)):
+		argz = [list(argz)]
+	else:
 		argz = list(argz)
 		argz[0] = list(argz[0])
 	if kwz.get('env') is True:
