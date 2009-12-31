@@ -442,7 +442,7 @@ import fcntl
 class LockError(EnvironmentError):
 	'''Inability to acquire lock'''
 
-class flock(object):
+class Flock(object):
 	'''Filesystem lock'''
 	gc_unlock = True
 
@@ -511,6 +511,8 @@ class flock(object):
 	__str__ = __repr__ = __hash__ = lambda s: '<FileLock %s>'%s._lock
 	def __enter__(self): return self.acquire()
 	def __exit__(self, ex_type, ex_val, ex_trace): self.release()
+
+flock = Flock # deprecated legacy alias
 
 
 from time import time
