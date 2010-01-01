@@ -23,6 +23,7 @@ strcaps_get_file(PyObject *self, PyObject *args) { // (int) fd / (str) path / (f
 			PyErr_SetString(PyExc_OSError, strerror(errno));
 			return NULL; } }
 	else strcaps = cap_to_text(caps, &strcaps_len);
+	cap_free(caps);
 	return Py_BuildValue("s#", strcaps, strcaps_len); }; // (str) caps
 
 static PyObject *
@@ -39,6 +40,7 @@ strcaps_get_process(PyObject *self, PyObject *args) { // (int) pid or None
 			PyErr_SetString(PyExc_OSError, strerror(errno));
 			return NULL; } }
 	else strcaps = cap_to_text(caps, &strcaps_len);
+	cap_free(caps);
 	return Py_BuildValue("s#", strcaps, strcaps_len); }; // (str) caps
 
 
@@ -61,6 +63,7 @@ strcaps_set_file(PyObject *self, PyObject *args) { // (str) caps, (int) fd / (st
 	if (err) {
 		PyErr_SetString(PyExc_OSError, strerror(errno));
 		return NULL; }
+	cap_free(caps);
 	Py_RETURN_NONE; };
 
 static PyObject *
@@ -77,6 +80,7 @@ strcaps_set_process(PyObject *self, PyObject *args) { // (str) caps, (int) pid o
 	if (err) {
 		PyErr_SetString(PyExc_OSError, strerror(errno));
 		return NULL; }
+	cap_free(caps);
 	Py_RETURN_NONE; };
 
 
