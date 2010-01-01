@@ -1,4 +1,4 @@
-from fgc.aio import AExec, PIPE, Time, Size, End
+from fgc.aio import AExec, PIPE, STDOUT, Time, Size, End
 
 
 _void = None
