@@ -33,7 +33,7 @@ class Caps(object):
 			for mod in '=+-':
 				try: cap, act = cap.split(mod)
 				except ValueError: continue
-				cap = cap.split(',')
+				cap = cap.split(',') if cap else list()
 				if mod == '=':
 					if not act: self._caps = Caps._caps
 					else:
@@ -54,7 +54,7 @@ class Caps(object):
 		strcaps = '='
 		caps = self._caps.copy()
 		for act in sets_cap:
-			if self._caps.get(act):
+			if caps.get(act):
 				strcaps += ' {0}+{1}'.format(','.join(caps.pop(act)), c2s(act))
 		caps = map(op.itemgetter(0), it.ifilter(op.itemgetter(1), caps.iteritems()))
 		if caps: raise ValueError, 'Invalid cap-set(s): {0}'.format(','.join(caps))
