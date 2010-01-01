@@ -6,7 +6,7 @@ from setuptools import setup, find_packages, Extension
 
 setup(
 	name = 'fgc',
-	version = '10.01.2',
+	version = '10.01.3',
 	author = 'Mike Kazantsev',
 	author_email = 'mike_kazantsev@fraggod.net',
 	description = ( 'Miscellaneous tools to soften stdlib shortcomings'
@@ -24,4 +24,5 @@ setup(
 		'License :: OSI Approved :: BSD License' ],
 	ext_modules  = [
 		Extension(name='fgc.psctl', sources=['psctl.c'], include_dirs=['/usr/src/linux/include']),
-		Extension(name='fgc.strcaps', sources=['strcaps.c'], libraries=['cap']) ] )
+		Extension(name='fgc.strcaps', sources=['strcaps.c'], libraries=['cap']),
+		Extension(name='fgc.stracl', sources=['stracl.c'], libraries=['acl']) ] )
