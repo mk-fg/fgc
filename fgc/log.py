@@ -7,7 +7,7 @@ ls._errl = logging.WARNING # Which msgz are considered worth reporting on errz()
 
 
 class DevNull(logging.Handler):
-	emit = lambda self, record: None
+	def emit(self, record): pass
 
 
 for val,name in logging._levelNames.iteritems():

@@ -83,41 +83,55 @@ def ls_files(sort=True):
 
 
 def exc(*argz, **kwz):
+	if log.errz():
+		log.warn('Execution halted because of errors, send \\n or break it.')
+		sys.stdin.readline()
 	if not argz:
 		argz = list(dta.overlap([cfg.bin.git], sys.argv))
 		if not kwz: return exe.proc(*argz).wait_cli()
 	return exe.proc(*argz, **kwz)
 
 
-from fgc import strcaps
+from fgc import strcaps, acl
 
 def perm_gen():
-	'''Permissions information file ('path uid:gid\n' format) generator'''
+	'''Permissions information file generator.
+	Format: path uid:gid[:mode] [ /cap;cap;... [ /acl,acl,... ] ]\n'''
 	numeric = cfg.ownage.use_ids
 	if cfg.ownage.omit:
 		return log.warn('Omit_permissions flag is set, skipping FS metadata changes')
-	ownage = {}
-	errz = False
+	ownage = dict()
+
 	for path in ls_files():
 		path = path.strip(spaces)
 		if path == cfg.ownage.file: continue
 		path = path.split(os.sep)
-		while True:
-			if path[0] not in ownage:
-				try: fstat = os.lstat(path[0])
-				except OSError:
-					log.error('Unable to stat path: %s'%path[0])
-					errz = True
+
+		while True: # try to add every component of the path
+			pathc = path[0]
+			if pathc not in ownage:
+				try: fstat = os.lstat(pathc)
+				except OSError: log.error('Unable to stat path: %s'%pathc)
 				else:
-					ownage[path[0]] = '%s:%s:%s'%(
+					ownage[pathc] = '%s:%s:%%s'%( # mode is acl-dependant
 						fstat.st_uid if numeric else sh.uname(fstat.st_uid),
-						fstat.st_gid if numeric else sh.gname(fstat.st_gid),
-						oct(fstat.st_mode & 07777).lstrip('0') ) # can produce likes of 04755
-					try: caps = strcaps.get_file(path[0])
+						fstat.st_gid if numeric else sh.gname(fstat.st_gid) )
+					try: caps = strcaps.get_file(pathc)
 					except OSError: caps = None # no kernel/fs support
-					if caps: ownage[path[0]] += ' %s'%caps.replace(' ', '/')
-			if len(path) == 1: break
-			path[0] = sh.join(path[0], path.pop(1))
+					try:
+						acls = acl.get(pathc)
+						if acl.is_mode(acls): raise OSError # just a mode reflection
+					except OSError: acls = None # no kernel/fs support
+					if caps: ownage[pathc] += '/%s'%caps.replace(' ', ';')
+					elif acls: ownage[pathc] += '/'
+					if acls:
+						mode = acl.get_mode(acls) | (fstat.st_mode & 07000)
+						ownage[pathc] += '/%s'%','.join(acls)
+					else: mode = fstat.st_mode
+					ownage[pathc] %= oct(mode & 07777).lstrip('0')
+			if len(path) == 1: break # no more components
+			path[0] = sh.join(pathc, path.pop(1))
+
 	if ownage:
 		ownage = ''.join( '%s %s\n'%(path, own) for path,own in
 			sorted(ownage.iteritems(), key=op.itemgetter(0)) ) + '\n'
@@ -128,17 +142,15 @@ def perm_gen():
 			sh.chmod(cfg.ownage.file, int(oct(cfg.ownage.mode), 8))
 			log.info('Updated ownership information')
 		if old_ownage is None: exe.proc(cfg.bin.git, 'add', cfg.ownage.file).wait()
-	else: log.info('No files given to harvest ownership info')
-	if errz:
-		log.warn('Execution halted because of errors, send \\n or break it.')
-		sys.stdin.readline()
+
+	else: log.info('No files to harvest ownership info from')
 
 def perm_apply():
 	'''Permissions setter, handles ownership information with both numeric and alpha uids/gids'''
 	if cfg.ownage.omit: return log.warn('Omit permissions flag is set, skipping FS metadata changes')
 	if not os.path.lexists(cfg.ownage.file): return log.warn('No ownership info stored')
 	log.info('Setting ownership...')
-	errz = skip_flag = False
+	skip_flag = False
 	try: sh.chmod(cfg.ownage.file, int(oct(cfg.ownage.mode), 8))
 	except OSError: log.error('Unable to change mode for %s file'%cfg.ownage.file)
 	for ln, line in enumerate(it.ifilter(
@@ -148,32 +160,31 @@ def perm_apply():
 			continue
 		elif line.startswith('<<<<<<<'):
 			skip_flag = True
-			errz = True
 			log.error('Git-merge block detected on line %s'%ln)
 		if skip_flag: continue # git-merge block
 
-		path, caps = line.rsplit(' ', 1)
-		if ':' in caps: ownage, caps = caps, None
-		else: path, ownage = path.rsplit(' ', 1)
-		try: uid, gid, mode = ownage.split(':', 2)
-		except ValueError:
-			print line
-			uid, gid = ownage.split(':', 1) # Deprecated format w/o mode
+		path, base = line.rsplit(' ', 1)
+		caps = acls = None
+		try:
+			base, caps = base.split('/', 1)
+			caps, acls = caps.split('/', 1)
+		except ValueError: pass
+		uid, gid, mode = base.split(':')
+		mode = sh.mode(mode)
+
 		try:
 			try: sh.chown(path, uid, gid, resolve=True)
 			except KeyError:
-				errz = True
 				log.error('No such id - %s:%s (%s)'%(uid,gid,path))
-			sh.chmod(path, int(mode, 8), deference=False)
-			if caps:
-				caps = caps.replace('/', ' ')
-				try: strcaps.set_file(caps, path)
-				except OSError:
-					errz = True
-					log.warn('Unable to set posix caps %r for path %s'%(caps, path))
+			sh.chmod(path, mode, deference=False)
 		except OSError:
-			errz = True
-			log.error('Unable to set permissions %s for path %s'%(ownage, path))
-	if errz:
-		log.warn('Execution halted because of errors, send \\n or break it.')
-		sys.stdin.readline()
+			log.error('Unable to set permissions %s for path %s'%(base, path))
+		if acls:
+			try: acl.rebase(acls, path, base=mode)
+			except OSError:
+				log.warn('Unable to set posix ACL %r for path %s'%(acls, path))
+		if caps:
+			try: strcaps.set_file(caps.replace(';', ' '), path)
+			except OSError:
+				log.warn('Unable to set posix caps %r for path %s'%(caps, path))
+
