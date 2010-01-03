@@ -504,7 +504,7 @@ class Flock(object):
 		return self
 
 	def __del__(self):
-		if self.gc_unlock:
+		if self.gc_unlock and self.locked:
 			self.release()
 			if self._del: rm(self._del, onerror=False)
 
