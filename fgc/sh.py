@@ -497,10 +497,11 @@ class Flock(object):
 				else: raise LockError('Unable to acquire lock: %s'%self._lock)
 		return self
 
-	def release(self):
+	def release(self, cleanup=True):
 		try: fcntl.flock(self._lock, fcntl.LOCK_UN)
 		except: pass
 		self.locked = False
+		if cleanup and self._del: rm(self._del, onerror=False)
 		return self
 
 	def __del__(self):
