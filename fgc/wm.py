@@ -1,25 +1,45 @@
 import itertools as it, operator as op, functools as ft
-from fgc.dta import ProxyObject
+from fgc.dta import cached, ProxyObject
 
 import gtk
 from Xlib import X, display
 
 
-_xlib_dpy = None
-_xlib_cache = dict()
+@cached
+def _xlib_dpy(): return display.Display()
 
-
+@cached
 def _xlib_atom(name):
-	global _xlib_dpy, _xlib_win_cache
-	try: return _xlib_cache[name]
-	except KeyError:
-		if not _xlib_dpy: _xlib_dpy = display.Display()
-		atom = _xlib_cache[name] = \
-			_xlib_dpy.intern_atom(name, only_if_exists=1)
-		return atom
+	return _xlib_dpy().intern_atom(name, only_if_exists=1)
+
+def _xlib_iter():
+	def __xlib_iter(win):
+		try: leaves = win.query_tree().children
+		except AttributeError: pass
+		else:
+			return it.chain( leaves,
+				it.chain.from_iterable(it.imap(__xlib_iter, leaves)) )
+	dpy = _xlib_dpy()
+	return it.chain.from_iterable(
+		__xlib_iter(dpy.screen(scr).root)
+		for scr in xrange(dpy.screen_count()) )
+
+
+
 
 
 class Window(ProxyObject):
+
+	@classmethod
+	def by_pid(cls, pid):
+		pid_atom = _xlib_atom('_NET_WM_PID')
+		for xwin in _xlib_iter():
+			prop = xwin.get_property(pid_atom, X.AnyPropertyType, 0, 1)
+			if prop and prop.value[0] == pid:
+				win = cls(gtk.gdk.window_foreign_new(xwin.id))
+				win._xwin = xwin
+				return win
+		else: return None
 
 	@classmethod
 	def get_active(cls, screen=None):
@@ -39,15 +59,14 @@ class Window(ProxyObject):
 		win_proxy = cls(win_gdk)
 		return win_proxy
 
+	_xwin = None
 	@property
 	def _xlib_win(self):
-		global _xlib_dpy, _xlib_win_cache
-		try: return _xlib_cache[self.xid]
-		except KeyError:
-			if not _xlib_dpy: _xlib_dpy = display.Display()
-			win = _xlib_cache[self.xid] = \
-				_xlib_dpy.create_resource_object('window', self.xid)
-			return win
+		if self._xwin: return self._xwin
+		else:
+			xlib_win = self._xwin = \
+				_xlib_dpy().create_resource_object('window', self.xid)
+			return xlib_win
 
 	def bounds_chk(self, jitter=None, state=None):
 		if state is not None and self.get_state() & state: return True
@@ -75,4 +94,10 @@ class Window(ProxyObject):
 	def fullscreen(self):
 		return self.bounds_chk( 0,
 			gtk.gdk.WINDOW_STATE_FULLSCREEN )
+
+	@property
+	def pid(self):
+		xlib_props = self._xlib_win.get_property(
+			_xlib_atom('_NET_WM_PID'), X.AnyPropertyType, 0, 100 )
+		return xlib_props.value[0]
 

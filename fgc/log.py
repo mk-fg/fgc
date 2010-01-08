@@ -1,5 +1,5 @@
 import logging, sys
-logging._extz = []
+logging._extz = list()
 logging.currentframe = lambda: sys._getframe(4) # skip traces from this module
 ls = logging.getLogger('core')
 ls._errz = ls._msgz = 0
@@ -45,19 +45,31 @@ add_handler = ls.addHandler
 add_filter = ls.addFilter
 
 
+date_format = dict(
+	format='%(asctime)s %(levelname)s'
+		' %(module)s.%(funcName)s: %(message)s',
+	datefmt='(%d.%m.%y %H:%M:%S)' )
+
+
 def _add_handlers(log, kwz):
 	try: key = kwz.pop('stream')
-	except KeyError: log.addHandler(DevNull())
+	except KeyError:
+		handler = DevNull()
+		log.addHandler(handler)
+		handlers = [handler]
 	else:
 		if not isinstance(key, (list,tuple)): key = (key,)
+		handlers = list()
 		for stream in key:
 			handler = logging.StreamHandler(stream)
-			format = []
+			format = list()
 			if 'format' in kwz:
 				format.append(kwz['format'])
 				if 'datefmt' in kwz: format.append(kwz['datefmt'])
 			if format: handler.setFormatter(logging.Formatter(*format))
 			log.addHandler(handler)
+			handlers.append(handler)
+	return handlers
 
 
 def cfg(*argz, **kwz):
@@ -65,22 +77,34 @@ def cfg(*argz, **kwz):
 	try: key = kwz.pop('err_threshold')
 	except KeyError: pass
 	else: ls._errl = key
-	kwz_ext = { # default format
-		'format': '%(asctime)s %(levelname)s %(module)s.%(funcName)s: %(message)s',
-		'datefmt': '(%d.%m.%y %H:%M:%S)'
-	}
+	kwz_ext = date_format.copy()
 	try:
-		if kwz['format'] is True: kwz.update(kwz_ext) # use default for a given streams as well
-	except: kwz_ext.update(kwz)
+		if kwz['format'] is True:
+			kwz.update(date_format) # use default for a given streams as well
+	except KeyError: kwz_ext.update(kwz)
 	_add_handlers(ls, kwz)
 	logging.basicConfig(*argz, **kwz_ext)
 	try: ls.setLevel(kwz['level'])
 	except: pass
 
+
 def extra(*argz, **kwz):
 	'''Add extra logging stream'''
-	ext = logging.getLogger('ext_%d'%len(logging._extz))
+	ext = logging.getLogger(
+		'ext_%d'%len(logging._extz) )
 	logging._extz.append(ext)
 	_add_handlers(ext, kwz)
 	return ext
+
+
+def add_stream(stream, **kwz):
+	try: log = kwz.pop('log')
+	except KeyError: log = ls
+	try: level = kwz.pop('level')
+	except KeyError: level = None
+	kwz['stream'] = stream
+	handlers = _add_handlers(log, kwz)
+	if level is not None:
+		for handler in handlers: handler.setLevel(level)
+	return handlers
 
