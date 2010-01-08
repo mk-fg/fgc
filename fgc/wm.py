@@ -25,21 +25,35 @@ def _xlib_iter():
 		for scr in xrange(dpy.screen_count()) )
 
 
+def _xlib_filter_pid(pid, xwin):
+	prop = xwin.get_property(
+		_xlib_atom('_NET_WM_PID'), X.AnyPropertyType, 0, 1 )
+	if prop and prop.value[0] == pid: return True
+	else: return False
 
 
 
 class Window(ProxyObject):
 
+
+	@classmethod
+	def from_xwin(cls, xwin, xwin_iter=None):
+		win = cls(gtk.gdk.window_foreign_new(xwin.id))
+		if xwin_iter is not None: win._xwin_iter = xwin_iter
+		win._xwin = xwin
+		return win
+
+
 	@classmethod
 	def by_pid(cls, pid):
-		pid_atom = _xlib_atom('_NET_WM_PID')
-		for xwin in _xlib_iter():
-			prop = xwin.get_property(pid_atom, X.AnyPropertyType, 0, 1)
-			if prop and prop.value[0] == pid:
-				win = cls(gtk.gdk.window_foreign_new(xwin.id))
-				win._xwin = xwin
-				return win
-		else: return None
+		xwin_iter = it.ifilter(ft.partial(
+			_xlib_filter_pid, pid ), _xlib_iter())
+		try: xwin = xwin_iter.next()
+		except StopIteration: return None
+		else:
+			win = cls.from_xwin(xwin, xwin_iter)
+			return win
+
 
 	@classmethod
 	def get_active(cls, screen=None):
@@ -59,6 +73,19 @@ class Window(ProxyObject):
 		win_proxy = cls(win_gdk)
 		return win_proxy
 
+
+	def __iter__(self):
+		'Cycle thru classmethod-matched windows'
+		yield self
+		while True:
+			try: yield self.next()
+			except StopIteration: break
+
+	def next(self):
+		'Cycle thru classmethod-matched windows'
+		return self.__class__.from_xwin(self._xwin_iter.next(), self._xwin_iter)
+
+
 	_xwin = None
 	@property
 	def _xlib_win(self):
@@ -67,6 +94,7 @@ class Window(ProxyObject):
 			xlib_win = self._xwin = \
 				_xlib_dpy().create_resource_object('window', self.xid)
 			return xlib_win
+
 
 	def bounds_chk(self, jitter=None, state=None):
 		if state is not None and self.get_state() & state: return True
@@ -84,6 +112,7 @@ class Window(ProxyObject):
 			if max(it.imap(abs, it.imap( op.sub, self.get_size(),
 				(screen.get_width(), screen.get_height()) ))) <= jitter: return True
 		return False
+
 
 	@property
 	def maximized(self):
