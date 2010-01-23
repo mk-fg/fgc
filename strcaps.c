@@ -16,7 +16,7 @@ strcaps_get_file(PyObject *self, PyObject *args) { // (int) fd / (str) path / (f
 		PyErr_SetString( PyExc_TypeError,
 			"Expecting file object, descriptor int or path string" );
 		return NULL; }
-	int strcaps_len; char *strcaps;
+	size_t strcaps_len; char *strcaps;
 	if (caps == NULL) {
 		if (errno == ENODATA) { strcaps = "\0"; strcaps_len = 0; }
 		else {
@@ -33,7 +33,7 @@ strcaps_get_process(PyObject *self, PyObject *args) { // (int) pid or None
 	cap_t caps;
 	if (!pid) caps = cap_get_proc();
 	else caps = cap_get_pid(pid);
-	int strcaps_len; char *strcaps;
+	size_t strcaps_len; char *strcaps;
 	if (caps == NULL) {
 		if (errno == ENODATA) { strcaps = "\0"; strcaps_len = 0; }
 		else {
