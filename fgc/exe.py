@@ -1,10 +1,11 @@
 from fgc.aio import AExec, PIPE, STDOUT, Time, Size, End
+from fgc.compat import string_types
 
 
 _void = None
 def proc(*argz, **kwz):
 	global _void
-	if isinstance(argz[0], (str, unicode)):
+	if isinstance(argz[0], string_types):
 		argz = [list(argz)]
 	else:
 		argz = list(argz)
@@ -35,7 +36,7 @@ import traceback
 import sys
 
 def ext_traceback():
-	message = buffer('')
+	message = ''
 	tb = sys.exc_info()[2]
 	while True:
 		if not tb.tb_next: break

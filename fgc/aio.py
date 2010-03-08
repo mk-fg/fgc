@@ -19,6 +19,8 @@ class Size: pass # hit-the-size-limit state
 class End: pass # hit-the-end state
 
 
+from fgc.compat import buffer
+
 class AWrapper(object):
 	'''Async I/O objects wrapper'''
 
@@ -119,15 +121,15 @@ class FileBridge(object):
 
 
 
+from fgc.compat import string_types
 import signal
 
 class AExec(Popen):
 	_ctl = None
 
-	def __init__(self, *argz, **kwz): # keywords aren't used yet
+	def __init__(self, *argz, **kwz):
 		if len(argz) == 1:
-			argz = (argz[0],) if isinstance(
-				argz[0], (str, unicode, buffer)) else argz[0]
+			argz = (argz[0],) if isinstance(argz[0], string_types) else argz[0]
 		self._cmdline = argz[0]
 
 		try: sync = kwz.pop('sync')
@@ -183,7 +185,7 @@ class AExec(Popen):
 		'Guarded wait that passes SIGINT to process first'
 		if to != -1: deadline = time() + to
 		try: return self.wait(to)
-		except KeyboardInterrupt, ex:
+		except KeyboardInterrupt as ex:
 			os.kill(self.pid, signal.SIGINT)
 			self.wait( min(0, deadline - time())
 				if deadline else to ) # second SIGINT will kill python
