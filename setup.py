@@ -6,18 +6,19 @@ from setuptools import setup, find_packages, Extension
 
 setup(
 	name = 'fgc',
-	version = '10.04.0',
+	version = '10.04.1',
 	author = 'Mike Kazantsev',
 	author_email = 'mike_kazantsev@fraggod.net',
-	description = ( 'Miscellaneous tools to soften stdlib shortcomings'
-		' and inconveniences. Not really intended to be used by someone else but author.' ),
+	description = 'Misc stdlib extensions',
 	license = 'BSD',
-	keywords = 'swiss utility misc wrappers extension convenience',
+	keywords = 'generic utility misc wrappers extension convenience',
 	url = 'http://fraggod.net/oss/fgc',
 	packages = find_packages(),
 	include_package_data=True,
-	long_description = 'Not really ;)',
-	# install_requires=['pyyaml'], not really ;)
+	long_description = 'Miscellaneous tools to soften stdlib shortcomings'\
+		' and inconveniences. Legacy stuff, mostly.'\
+		' Not really intended to be used by someone else but author.',
+	# install_requires=['pyyaml'], for single legacy function which shouldn't be used anyway
 	classifiers = [
 		'Development Status :: Eternal Alpha',
 		'Topic :: Utilities',
