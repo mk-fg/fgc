@@ -8,7 +8,7 @@ Optimized and simplified a lot, since original implementation was rubbish.
 import os, sys, stat, re, pwd, grp
 from os.path import join, islink
 from os import walk, rmdir
-import log
+import log, warnings
 
 
 
@@ -450,6 +450,8 @@ class Flock(object):
 	def _type(self): return fcntl.LOCK_EX if not self._shared else fcntl.LOCK_SH
 
 	def __init__(self, path, make=False, shared=False, remove=None, timeout=None):
+		warnings.warn( 'Usage of sh.Flock class is unreliable'
+			' and deprecated - use sh.flock2 instead', DeprecationWarning )
 		self.locked = self._del = False
 		if remove == None: remove = make
 		try: self._lock = open(path)
@@ -514,6 +516,23 @@ class Flock(object):
 	def __exit__(self, ex_type, ex_val, ex_trace): self.release()
 
 flock = Flock # deprecated legacy alias
+
+
+def flock2(path, contents=None, add_newline=True, append=False):
+	'Simplier and more reliable flock function'
+	try:
+		lock = open(path, ('r+' if os.path.exists(path) else 'w') if not append else 'a+')
+		fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+	except (IOError, OSError) as ex:
+		raise LockError('Unable to acquire lockfile ({0})): {1}'.format(path, ex))
+	if contents:
+		if not append:
+			lock.seek(0, os.SEEK_SET)
+			lock.truncate()
+		lock.write(str(contents) + '\n')
+		lock.flush()
+	return lock
+
 
 
 from time import time
