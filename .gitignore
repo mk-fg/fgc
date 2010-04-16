@@ -1,2 +1,5 @@
+/fgc.egg-info
+/build
+/dist
 *.pyc
 *.pyo

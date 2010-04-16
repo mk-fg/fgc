@@ -4,6 +4,10 @@
 
 from setuptools import setup, find_packages, Extension
 
+# Dirty workaround for "error: byte-compiling is disabled." message
+import sys
+sys.dont_write_bytecode = False
+
 setup(
 	name = 'fgc',
 	version = '{version}',

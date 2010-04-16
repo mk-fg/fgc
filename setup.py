@@ -4,9 +4,13 @@
 
 from setuptools import setup, find_packages, Extension
 
+# Dirty workaround for "error: byte-compiling is disabled." message
+import sys
+sys.dont_write_bytecode = False
+
 setup(
 	name = 'fgc',
-	version = '10.04.1',
+	version = '10.04.2',
 	author = 'Mike Kazantsev',
 	author_email = 'mike_kazantsev@fraggod.net',
 	description = 'Misc stdlib extensions',
