@@ -1,10 +1,11 @@
 'High-level POSIX capabilities manipulation interface'
 
 import itertools as it, operator as op, functools as ft
+from copy import deepcopy
 from fgc import strcaps
 
 
-sets_cap = ['permitted', 'inherited', 'effective']
+sets_cap = ['permitted', 'inheritable', 'effective']
 sets_str = map(op.itemgetter(0), sets_cap)
 s2c = dict(it.izip(sets_str, sets_cap)).__getitem__
 c2s = dict(it.izip(sets_cap, sets_str)).__getitem__
@@ -28,14 +29,14 @@ class Caps(object):
 	from_process = staticmethod(get_process)
 
 	def __init__(self, strcaps=''):
-		self._caps = dict((cap, set()) for cap in sets_cap)
+		self.clear()
 		for cap in strcaps.split():
 			for mod in '=+-':
 				try: cap, act = cap.split(mod)
 				except ValueError: continue
 				cap = cap.split(',') if cap else list()
 				if mod == '=':
-					if not act: self._caps = Caps._caps
+					if not act: self.clear()
 					else:
 						for mod in act:
 							self._caps[s2c(mod)] = set(cap)
@@ -52,7 +53,7 @@ class Caps(object):
 	def __str__(self):
 		# Very simple implementation w/o looking for common subsets
 		strcaps = '='
-		caps = self._caps.copy()
+		caps = deepcopy(self._caps)
 		for act in sets_cap:
 			if caps.get(act):
 				strcaps += ' {0}+{1}'.format(','.join(caps.pop(act)), c2s(act))
@@ -70,7 +71,7 @@ class Caps(object):
 
 	def activate(self):
 		'Set all permitted caps as effective'
-		self._caps['effective'] = self._caps['permitted']
+		self._caps['effective'] = set(self._caps['permitted'])
 		return self
 	def deactivate(self):
 		'Reset effective caps'
@@ -79,7 +80,7 @@ class Caps(object):
 
 	def propagate(self):
 		'Make all permitted caps inheritable'
-		self._caps['inheritable'] = self._caps['permitted']
+		self._caps['inheritable'] = set(self._caps['permitted'])
 		return self
 	def terminate(self):
 		'Drop inheritable caps'
@@ -88,7 +89,7 @@ class Caps(object):
 
 	def clear(self):
 		'Strip all caps'
-		self._caps = Caps._caps
+		self._caps = deepcopy(Caps._caps)
 		return self
 
 
