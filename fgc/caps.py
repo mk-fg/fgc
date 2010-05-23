@@ -27,8 +27,8 @@ class Caps(object):
 	from_file = staticmethod(get_file)
 	from_process = staticmethod(get_process)
 
-
 	def __init__(self, strcaps=''):
+		self._caps = dict((cap, set()) for cap in sets_cap)
 		for cap in strcaps.split():
 			for mod in '=+-':
 				try: cap, act = cap.split(mod)
