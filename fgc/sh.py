@@ -518,13 +518,37 @@ class Flock(object):
 flock = Flock # deprecated legacy alias
 
 
-def flock2(path, contents=None, add_newline=True, append=False):
+
+from time import time
+import signal, errno
+
+def flock2(path, contents=None, add_newline=True, append=False, block=False):
 	'Simplier and more reliable flock function'
+
 	try:
 		lock = open(path, ('r+' if os.path.exists(path) else 'w') if not append else 'a+')
-		fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-	except (IOError, OSError) as ex:
+		if not block: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+		else:
+			prev_alarm = signal.alarm(block)
+			if prev_alarm: prev_alarm = time() + prev_alarm
+			prev_alarm_handler = signal.signal(signal.SIGALRM, lambda sig,frm: None)
+			try: fcntl.flock(lock, fcntl.LOCK_EX)
+			except (OSError, IOError) as err:
+				if err.errno != errno.EINTR: raise
+				else: raise LockError('Timeout has passed ({0})'.format(block))
+			finally:
+				signal.signal(signal.SIGALRM, prev_alarm_handler)
+				if prev_alarm:
+					prev_alarm = prev_alarm - time()
+					if prev_alarm > 0: signal.alarm(prev_alarm)
+					else:
+						signal.alarm(0)
+						os.kill(os.getpid(), signal.SIGALRM)
+				else: signal.alarm(0)
+
+	except (IOError, OSError, LockError) as ex:
 		raise LockError('Unable to acquire lockfile ({0})): {1}'.format(path, ex))
+
 	if contents:
 		if not append:
 			lock.seek(0, os.SEEK_SET)
@@ -535,7 +559,6 @@ def flock2(path, contents=None, add_newline=True, append=False):
 
 
 
-from time import time
 def multi_lock(*paths, **kwz):
 	try: timeout = kwz.pop('timeout')
 	except: deadline = None
