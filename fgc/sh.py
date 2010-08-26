@@ -62,14 +62,18 @@ def mode(mode):
 
 
 def chown(path, tuid=-1, tgid=-1,
-		recursive=False, deference=True, resolve=False):
+		recursive=False, dereference=True, resolve=False):
 	if resolve: tuid, tgid = resolve_ids(tuid, tgid)
-	op = os.chown if deference else os.lchown
+	op = os.chown if dereference else os.lchown
 	if recursive:
-		for node in it.imap(ft.partial(join, path), crawl(path, dirs=True)): op(node, tuid, tgid)
+		for node in it.imap( ft.partial(join, path),
+			crawl(path, dirs=True) ): op(node, tuid, tgid)
 	op(path, tuid, tgid)
-def chmod(path, bits, deference=True):
-	if deference: os.chmod(path, bits)
+def chmod(path, bits, dereference=True, merge=False):
+	if merge:
+		bits = stat.S_IMODE(( os.stat
+			if dereference else os.lstat )(path).st_mode) | bits
+	if dereference: os.chmod(path, bits)
 	else:
 		try: os.lchmod(path, bits)
 		except AttributeError: # no support for symlink modes
@@ -119,9 +123,9 @@ def cp(src, dst, attrz=False, sync=False):
 	cp_stat(src, dst, attrz=attrz)
 
 
-def cp_stat(src, dst, attrz=False, deference=True, skip_ts=False):
+def cp_stat(src, dst, attrz=False, dereference=True, skip_ts=False):
 	'''Copy mode or full attrz (atime, mtime and ownership) from src to dst'''
-	if deference:
+	if dereference:
 		chmod = os.chmod
 		chown = os.chown
 		st = os.stat(src) if isinstance(src, (str, unicode)) else src
@@ -136,7 +140,7 @@ def cp_stat(src, dst, attrz=False, deference=True, skip_ts=False):
 		chown = os.lchown
 	chmod(dst, stat.S_IMODE(st.st_mode))
 	if attrz:
-		if deference and not skip_ts: os.utime(dst, (st.st_atime, st.st_mtime)) # not for symlinks
+		if dereference and not skip_ts: os.utime(dst, (st.st_atime, st.st_mtime)) # not for symlinks
 		chown(dst, st.st_uid, st.st_gid)
 	return st
 
@@ -251,7 +255,8 @@ def mv(src, dst):
 		rr(src)
 
 
-def crawl(top, filter=None, exclude=None, dirs=True, topdown=True, onerror=False):
+def crawl(top, filter=None, exclude=None,
+	dirs=True, topdown=True, onerror=False, dirs_only=False):
 	'''Filesystem nodes iterator.'''
 	nodes = []
 	try: filter = filter and [re.compile(filter)]
@@ -260,7 +265,8 @@ def crawl(top, filter=None, exclude=None, dirs=True, topdown=True, onerror=False
 	except TypeError: exclude = [re.compile(regex) for regex in exclude]
 	for root, d, f in walk(top, topdown=topdown):
 		root = root[len(top):].lstrip('/')
-		if dirs: f = d + f # dirs first
+		if dirs_only: f = d
+		elif dirs: f = d + f # dirs first
 		for name in f:
 			path = join(root, name)
 			if exclude:
@@ -400,7 +406,7 @@ def mktemp(path, mode=None, tuid=-1, tgid=-1, atomic=False, sync=False):
 			try:
 				if not post_stat:
 					st = cp_stat(pre_stat or dst_path, tmp_path,
-						attrz=True, deference=True, skip_ts=True) # copy attrz from dst
+						attrz=True, dereference=True, skip_ts=True) # copy attrz from dst
 				else:
 					st = pre_stat or os.stat(dst_path)
 					while post_stat: post_stat.pop()(tmp_path) # use passed attrz

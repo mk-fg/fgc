@@ -176,7 +176,7 @@ def perm_apply():
 			try: sh.chown(path, uid, gid, resolve=True)
 			except KeyError:
 				log.error('No such id - %s:%s (%s)'%(uid,gid,path))
-			sh.chmod(path, mode, deference=False)
+			sh.chmod(path, mode, dereference=False)
 		except OSError:
 			log.error('Unable to set permissions %s for path %s'%(base, path))
 		if acls:
