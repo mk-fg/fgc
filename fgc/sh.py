@@ -116,14 +116,14 @@ def cp_cat(src, dst, recode=None, append=False, sync=False):
 		if fsrc: fsrc.close()
 
 
-def cp(src, dst, attrz=False, sync=False):
+def cp(src, dst, attrz=False, sync=False, skip_ts=None):
 	'''Copy data and mode bits ("cp src dst"). The destination may be a dir.'''
 	if os.path.isdir(dst): dst = join(dst, os.path.basename(src))
 	cp_cat(src, dst, sync=sync)
-	cp_stat(src, dst, attrz=attrz)
+	cp_stat(src, dst, attrz=attrz, skip_ts=skip_ts)
 
 
-def cp_stat(src, dst, attrz=False, dereference=True, skip_ts=False):
+def cp_stat(src, dst, attrz=False, dereference=True, skip_ts=None):
 	'''Copy mode or full attrz (atime, mtime and ownership) from src to dst'''
 	if dereference:
 		chmod = os.chmod
@@ -139,16 +139,17 @@ def cp_stat(src, dst, attrz=False, dereference=True, skip_ts=False):
 			else: chmod = os.chmod
 		chown = os.lchown
 	chmod(dst, stat.S_IMODE(st.st_mode))
-	if attrz:
-		if dereference and not skip_ts: os.utime(dst, (st.st_atime, st.st_mtime)) # not for symlinks
-		chown(dst, st.st_uid, st.st_gid)
+	if skip_ts is None: skip_ts = not attrz
+	if dereference and not skip_ts:
+		os.utime(dst, (st.st_atime, st.st_mtime)) # not for symlinks
+	if attrz: chown(dst, st.st_uid, st.st_gid)
 	return st
 
 
 cp_p = lambda src,dst: cp(src, dst, attrz=True)
 
 
-def cp_d(src, dst, symlinks=False, attrz=False):
+def cp_d(src, dst, symlinks=False, attrz=False, skip_ts=None):
 	'''Copy only one node, whatever it is.'''
 	if symlinks and islink(src):
 		src_node = os.readlink(src)
@@ -157,11 +158,12 @@ def cp_d(src, dst, symlinks=False, attrz=False):
 		try: os.makedirs(dst)
 		except OSError, err: raise Error, str(err)
 	else: cp(src, dst, attrz=attrz)
-	cp_stat(src, dst, attrz=attrz)
+	cp_stat(src, dst, attrz=attrz, skip_ts=skip_ts)
 	# TODO: What about devices, sockets etc.?
 
 
-def cp_r(src, dst, symlinks=False, attrz=False, skip=[], onerror=None, atom=cp_d):
+def cp_r( src, dst, symlinks=False,
+		attrz=False, skip=[], onerror=None, atom=cp_d ):
 	'''
 	Recursively copy a directory tree, preserving mode/stats.
 
@@ -192,7 +194,8 @@ def cp_r(src, dst, symlinks=False, attrz=False, skip=[], onerror=None, atom=cp_d
 				src_node = join(src, entity)
 				dst_node = join(dst, entity)
 				atom(src_node, dst_node, symlinks=symlinks, attrz=attrz)
-			except (IOError, OSError, Error), err: onerror(src_node, dst_node, str(err))
+			except (IOError, OSError, Error), err:
+				onerror(src_node, dst_node, str(err))
 	try:
 		if errors: raise Error, errors
 	except NameError: pass
@@ -239,7 +242,7 @@ def rr(path, onerror=None, preserve=[], keep_root=False):
 	if not (preserve or keep_root): rm(path, onerror)
 
 
-def mv(src, dst):
+def mv(src, dst, attrz=True):
 	'''
 	Recursively move a path.
 
@@ -247,16 +250,20 @@ def mv(src, dst):
 	rename.  Otherwise, copy src to the dst and then remove src.
 	A lot more could be done here...  A look at a mv.c shows a lot of
 	the issues this implementation glosses over.
+
+	attrz determines whether privileged attrz like uid/gid will be
+	manipulated. Timestamps are always preserved.
 	'''
 	try: os.rename(src, dst)
 	except OSError:
 		if _cmp(src, dst): raise Error, "'%s' and '%s' are the same object."%(src,dst)
-		cp_r(src, dst, symlinks=True, attrz=True)
+		cp_r( src, dst, symlinks=True,
+			attrz=attrz, atom=ft.partial(cp_d, skip_ts=False) )
 		rr(src)
 
 
-def crawl(top, filter=None, exclude=None,
-	dirs=True, topdown=True, onerror=False, dirs_only=False):
+def crawl( top, filter=None, exclude=None,
+		dirs=True, topdown=True, onerror=False, dirs_only=False ):
 	'''Filesystem nodes iterator.'''
 	nodes = []
 	try: filter = filter and [re.compile(filter)]
