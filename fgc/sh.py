@@ -566,7 +566,7 @@ def flock2(path, contents=None, add_newline=True, append=False, block=False):
 		if not append:
 			lock.seek(0, os.SEEK_SET)
 			lock.truncate()
-		lock.write(str(contents) + '\n')
+		lock.write(str(contents) + '\n' if add_newline else '')
 		lock.flush()
 	return lock
 
