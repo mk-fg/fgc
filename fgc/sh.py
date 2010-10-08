@@ -101,7 +101,7 @@ def _cmp(src, dst):
 			os.path.normcase(os.path.abspath(dst)))
 
 
-def cp_cat(src, dst, recode=None, append=False, sync=False):
+def cp_cat(src, dst, recode=None, append=False, sync=True):
 	'''Copy data from src to dst'''
 	if _cmp(src, dst): raise Error, "'%s' and '%s' are the same file" %(src,dst)
 	fsrc = None
