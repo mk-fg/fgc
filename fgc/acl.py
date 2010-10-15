@@ -13,6 +13,9 @@ _eff_set = lambda x: '{0}:{1}'.format(
 _def_get = lambda x: x.startswith('d:')
 _def_set = lambda x: 'd:{0}'.format(x)
 _def_strip = op.itemgetter(slice(2, None))
+_line_id = lambda x:\
+	(x[0] if not x.startswith('d:') else x[:3])\
+		if _mode(x) else x.rsplit(':', 1)[0]
 
 
 def from_mode(mode):
@@ -87,9 +90,16 @@ def apply(acl, node):
 
 def update(base, ext):
 	'Rebase one ACL on top of the other'
-	res = dict((line[0], line) for line in base)
-	res.update((line[0] if _mode(line) else line, line) for line in ext)
-	return res.itervalues()
+	res = dict((_line_id(line), line) for line in base)
+	res.update((_line_id(line), line) for line in ext)
+	return res.values()
+
+def update_from_default(acl):
+	'''Update non-default acl lines from default lines,
+			possibly overriding acls for the same target.
+		Useful to fix mask-crippled acls after chmod.'''
+	if not has_defaults(acl): return acl
+	return update(acl, (line[2:] for line in acl if line.startswith('d:')))
 
 def canonized(acl):
 	'Break down ACL string into a list-form'
