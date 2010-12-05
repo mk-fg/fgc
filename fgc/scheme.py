@@ -37,7 +37,7 @@ str = types.StringTypes
 ################ parse, read, and user interaction
 
 def parse(inport):
-	"Parse a program: read and expand/error-check it."
+	'Parse a program: read and expand/error-check it.'
 	# Backwards compatibility: given a str, convert it to an InPort
 	if isa(inport, str): inport = InPort(StringIO.StringIO(inport))
 	return expand(read(inport), toplevel=True)
@@ -46,7 +46,7 @@ eof_object = Symbol('#<eof-object>') # Note: uninterned; can't be read
 
 class InPort(object):
 	'An input port. Retains a line of chars.'
-	tokenizer = r'''\s*(,@|[('`,)]|'(?:[\\].|[^\\'])*'|;.*|[^\s(''`,;)]*)(.*)'''
+	tokenizer = r"""\s*(,@|[('`,)]|"(?:[\\].|[^\\"])*"|;.*|[^\s('"`,;)]*)(.*)"""
 	def __init__(self, file):
 		self.file = file; self.line = ''
 	def next_token(self):
@@ -55,8 +55,7 @@ class InPort(object):
 			if self.line == '': self.line = self.file.readline()
 			if self.line == '': return eof_object
 			token, self.line = re.match(InPort.tokenizer, self.line).groups()
-			if token != '' and not token.startswith(';'):
-				return token
+			if token != '' and not token.startswith(';'): return token
 
 def readchar(inport):
 	'Read the next character from an input port.'
@@ -222,8 +221,7 @@ def eval(x, env=global_env):
 			if isa(proc, Procedure):
 				x = proc.exp
 				env = Env(proc.parms, exps, proc.env)
-			else:
-				return proc(*exps)
+			else: return proc(*exps)
 
 
 ################ expand
@@ -298,7 +296,8 @@ def expand_quasiquote(x):
 		require(x[0], len(x[0])==2)
 		return [_append, x[0][1], expand_quasiquote(x[1:])]
 	else:
-		return [_cons, expand_quasiquote(x[0]), expand_quasiquote(x[1:])]
+		return [_cons, expand_quasiquote(x[0]), expand_quasiquote(x[1:])]\
+			if x[0] is not _quasiquote else expand_quasiquote(expand_quasiquote(x[1:])[1])
 
 def let(*args):
 	args = list(args)
@@ -310,7 +309,7 @@ def let(*args):
 	vars, vals = zip(*bindings)
 	return [[_lambda, list(vars)]+map(expand, body)] + map(expand, vals)
 
-macro_table = {_let:let} ## More macros can go here
+macro_table = {_let:let}
 
 peval('''(begin
 
@@ -319,6 +318,9 @@ peval('''(begin
 		(if (= (length args) 1) (car args)
 			`(if ,(car args) (and ,@(cdr args)) #f)))))
 
-;; More macros can also go here
+(define-macro or (lambda args
+	(if (null? args) #f
+		(if (= (length args) 1) (car args)
+			`(if ,(car args) ,(car args) (or ,@(cdr args)))))))
 
 )''')
