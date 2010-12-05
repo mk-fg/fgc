@@ -6,8 +6,10 @@ from string import whitespace as spaces
 from select import epoll, EPOLLIN
 from time import sleep
 from fcntl import ioctl
-from fgc import log
 import struct, sys, os
+
+import logging
+log = logging.getLogger(__name__)
 
 
 ev_skip = set(['EV_VERSION'])
@@ -272,7 +274,7 @@ class Control(object):
 if __name__ == "__main__":
 	# Open the event device named on the command line, use incoming
 	#  events to update a device, and show the state of this device.
-	log.cfg(level=log.DEBUG)
+	logging.basicConfig(level=logging.DEBUG)
 	dev = DeviceGroup(sys.argv[1:])
 	# event = Event(type='EV_KEY', code='KEY_ENTER', value=1)
 	while 1:

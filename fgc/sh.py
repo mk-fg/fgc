@@ -8,7 +8,7 @@ Optimized and simplified a lot, since original implementation was rubbish.
 import os, sys, stat, re, pwd, grp
 from os.path import join, islink
 from os import walk, rmdir
-import log, warnings
+from warnings import warn
 
 
 
@@ -374,7 +374,7 @@ class GC:
 			else: continue
 			if isinstance(act, file): act.close()
 			elif isinstance(act, (str, unicode)): rm(act, onerror=False)
-			else: log.warn('Unknown garbage type: %r'%act)
+			else: warn('Unknown garbage type: %r'%act)
 	def add(self, *actz):
 		for act in actz:
 			if not isinstance(act, (str, unicode)):
@@ -463,7 +463,7 @@ class Flock(object):
 	def _type(self): return fcntl.LOCK_EX if not self._shared else fcntl.LOCK_SH
 
 	def __init__(self, path, make=False, shared=False, remove=None, timeout=None):
-		warnings.warn( 'Usage of sh.Flock class is unreliable'
+		warn( 'Usage of sh.Flock class is unreliable'
 			' and deprecated - use sh.flock2 instead', DeprecationWarning )
 		self.locked = self._del = False
 		if remove == None: remove = make
@@ -506,9 +506,7 @@ class Flock(object):
 				for attempt in xrange(0, timeout, int(interval)):
 					attempt = self.check(True)
 					if attempt: break
-					else:
-						log.debug('Waiting for lock: %s'%self._lock)
-						sleep(interval)
+					else: sleep(interval)
 				else: raise LockError('Unable to acquire lock: %s'%self._lock)
 		return self
 

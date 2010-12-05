@@ -1,3 +1,4 @@
+import sys
 enc_default = sys.getdefaultencoding()
 if enc_default == 'ascii': enc_default = 'utf-8' # ascii is always bad idea
 

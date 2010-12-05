@@ -1,7 +1,10 @@
 import itertools as it, operator as op, functools as ft
 from string import whitespace as spaces
-from fgc import log, sh, dta, exe
+from fgc import sh, dta, exe
 import os, sys, re
+
+import logging
+log = logging.getLogger(__name__)
 
 
 # Swallow '--config-dir' parameter, if any
@@ -14,7 +17,9 @@ try:
 except (IndexError, ValueError): cfg_dir = sh.join(cfgit, 'cfgit')
 # Read cfg or die
 try: cfg = dta.do(sh.join(cfg_dir, 'config.yaml'))
-except Exception as ex: log.fatal('Configuration error: %s'%ex, crash=1)
+except Exception as ex:
+	log.fatal('Configuration error: %s'%ex)
+	sys.exit(1)
 
 
 from ConfigParser import ConfigParser
@@ -83,9 +88,6 @@ def ls_files(sort=True):
 
 
 def exc(*argz, **kwz):
-	if log.errz():
-		log.warn('Execution halted because of errors, send \\n or break it.')
-		sys.stdin.readline()
 	if not argz:
 		argz = list(dta.overlap([cfg.bin.git], sys.argv))
 		if not kwz: return exe.proc(*argz).wait_cli()
