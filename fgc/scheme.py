@@ -104,20 +104,20 @@ def to_string(x):
 
 def load(filename):
 	'Eval every expression from a file.'
-	repl(None, InPort(open(filename)), None)
+	return repl(InPort(open(filename)), out=None)
 
-def repl(prompt='lispy> ', inport=InPort(sys.stdin), out=sys.stdout):
+def repl(inport=InPort(sys.stdin), out=sys.stdout):
 	'A prompt-read-eval-print loop.'
-	sys.stderr.write("Lispy version 2.0\n")
+	val = None
 	while True:
 		try:
-			if prompt: sys.stderr.write(prompt)
 			x = parse(inport)
-			if x is eof_object: return
+			if x is eof_object: return val
 			val = eval(x)
-			if val is not None and out: print(to_string(val), file=out)
+			if out and val is not None: print(to_string(val), file=out)
 		except Exception as e:
-			print('{}: {}'.format(type(e).__name__, e), file=out)
+			if out: print('{}: {}'.format(type(e).__name__, e), file=out)
+			else: raise
 
 def peval(x): return eval(parse(x))
 
@@ -168,13 +168,7 @@ def add_globals(self):
 		'list':lambda *x:list(x), 'list?': lambda x:isa(x,list),
 		'null?':lambda x:x==[], 'symbol?':lambda x: isa(x, Symbol),
 		'boolean?':lambda x: isa(x, bool), 'pair?':is_pair,
-		'port?': lambda x:isa(x,file), 'apply':lambda proc,l: proc(*l),
-		'eval':lambda x: eval(expand(x)), 'load':lambda fn: load(fn), 'call/cc':callcc,
-		'open-input-file':open,'close-input-port':lambda p: p.file.close(),
-		'open-output-file':lambda f:open(f,'w'), 'close-output-port':lambda p: p.close(),
-		'eof-object?':lambda x:x is eof_object, 'read-char':readchar,
-		'read':read, 'write':lambda x,port=sys.stdout:port.write(to_string(x)),
-		'display':lambda x,port=sys.stdout:port.write(x if isa(x,str) else to_string(x)) })
+		'apply':lambda proc,l: proc(*l), 'eval':lambda x: eval(expand(x)), 'call/cc':callcc })
 	return self
 
 
@@ -201,7 +195,7 @@ def eval(x, env=None):
 		elif x[0] is _define: # (define var exp)
 			(_, var, exp) = x
 			env[var] = eval(exp, env)
-			return None
+			return env[var]
 		elif x[0] is _lambda: # (lambda (var*) exp)
 			(_, vars, exp) = x
 			return Procedure(vars, exp, env)
@@ -215,7 +209,12 @@ def eval(x, env=None):
 			if isa(proc, Procedure):
 				x = proc.exp
 				env = Env(proc.parms, exps, proc.env)
-			else: return proc(*exps)
+			else:
+				try: return proc(*exps)
+				except:
+					print('Call failed: {} ({})'.format( proc,
+						', '.join(it.imap(repr, exps)), file=sys.stderr ))
+					raise
 
 
 ################ expand
