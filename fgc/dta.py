@@ -31,7 +31,7 @@ def chain(*argz, **kwz):
 	nonempty = kwz.get('nonempty', False)
 	for arg in argz:
 		if nonempty and arg is None: continue
-		elif isinstance(arg, atomic): yield arg
+		elif isinstance(arg, (types.StringTypes, int, float)): yield arg
 		else:
 			try:
 				for sub in arg:
