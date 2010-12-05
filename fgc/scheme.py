@@ -6,22 +6,19 @@ import itertools as it, operator as op, functools as ft
 from fgc.enc import enc_default
 
 
+global_env = macro_table = symbol_table = None
+
+
 ################ Symbol, Procedure, classes
 
 import re, sys, types, StringIO
 
 class Symbol(unicode): pass
 
-def Sym(s, symbol_table={}):
+def Sym(s):
 	'Find or create unique Symbol entry for str s in symbol table.'
 	if s not in symbol_table: symbol_table[s] = Symbol(s)
 	return symbol_table[s]
-
-_quote, _if, _set, _define, _lambda, _begin, _definemacro, = it.imap(
-	Sym, ['quote', 'if', 'set', 'define', 'lambda', 'begin', 'define-macro'] )
-
-_quasiquote, _unquote, _unquotesplicing = it.imap(
-	Sym, ['quasiquote', 'unquote', 'unquote-splicing'] )
 
 class Procedure(object):
 	'A user-defined Scheme procedure.'
@@ -81,8 +78,6 @@ def read(inport):
 	# body of read:
 	token1 = inport.next_token()
 	return eof_object if token1 is eof_object else read_ahead(token1)
-
-quotes = {"'":_quote, '`':_quasiquote, ',':_unquote, ',@':_unquotesplicing}
 
 def atom(token):
 	'Numbers become numbers; #t and #f are booleans; "..." string; otherwise Symbol.'
@@ -182,13 +177,12 @@ def add_globals(self):
 		'display':lambda x,port=sys.stdout:port.write(x if isa(x,str) else to_string(x)) })
 	return self
 
-global_env = add_globals(Env())
-
 
 ################ eval (tail recursive)
 
-def eval(x, env=global_env):
+def eval(x, env=None):
 	'Evaluate an expression in an environment.'
+	if env is None: env = global_env
 	while True:
 		if isa(x, Symbol): # variable reference
 			return env.find(x)[x]
@@ -282,8 +276,6 @@ def require(x, predicate, msg='wrong length'):
 	'Signal a syntax error if predicate is false.'
 	if not predicate: raise SyntaxError(to_string(x)+': '+msg)
 
-_append, _cons, _let = it.imap(Sym, ['append', 'cons', 'let'])
-
 def expand_quasiquote(x):
 	'''Expand `x => 'x; `,x => x; `(,@x y) => (append x y)'''
 	if not is_pair(x):
@@ -309,18 +301,35 @@ def let(*args):
 	vars, vals = zip(*bindings)
 	return [[_lambda, list(vars)]+map(expand, body)] + map(expand, vals)
 
-macro_table = {_let:let}
 
-peval('''(begin
+## Interpreter setup
 
-(define-macro and (lambda args
-	(if (null? args) #t
-		(if (= (length args) 1) (car args)
-			`(if ,(car args) (and ,@(cdr args)) #f)))))
+def init_env(env_ext=dict()):
+	global global_env, macro_table, symbol_table
+	symbol_table = dict()
 
-(define-macro or (lambda args
-	(if (null? args) #f
-		(if (= (length args) 1) (car args)
-			`(if ,(car args) ,(car args) (or ,@(cdr args)))))))
+	global_env = add_globals(Env())
+	global _quote, _if, _set, _define, _lambda, _begin, _definemacro
+	_quote, _if, _set, _define, _lambda, _begin, _definemacro = it.imap(
+		Sym, ['quote', 'if', 'set', 'define', 'lambda', 'begin', 'define-macro'] )
+	global _quasiquote, _unquote, _unquotesplicing
+	_quasiquote, _unquote, _unquotesplicing = it.imap(
+		Sym, ['quasiquote', 'unquote', 'unquote-splicing'] )
+	global _append, _cons, _let, quotes
+	_append, _cons, _let = it.imap(Sym, ['append', 'cons', 'let'])
+	quotes = {"'":_quote, '`':_quasiquote, ',':_unquote, ',@':_unquotesplicing}
 
-)''')
+	macro_table = {_let:let}
+
+	peval('''(begin
+	(define-macro and (lambda args
+		(if (null? args) #t
+			(if (= (length args) 1) (car args)
+				`(if ,(car args) (and ,@(cdr args)) #f)))))
+	(define-macro or (lambda args
+		(if (null? args) #f
+			(if (= (length args) 1) (car args)
+				`(if ,(car args) ,(car args) (or ,@(cdr args)))))))
+	)''')
+
+	for sym,val in env_ext.iteritems(): global_env[Sym(sym)] = val
