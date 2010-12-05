@@ -1,5 +1,4 @@
-from string import whitespace as spaces
-from contextlib import contextmanager
+import itertools as it, operator as op, functools as ft
 
 
 import types
@@ -50,10 +49,8 @@ def coroutine(proc):
 _cache, _cache_func = dict(), None
 def cached(proc):
 	from collections import deque
-	import itertools as it
 	global _cache_func
-	if _cache_func: return _cache_func
-	else:
+	if not _cache_func:
 		def frozen(obj):
 			if isinstance(obj, dict):
 				return frozenset((frozen(x[0]), frozen(x[1])) for x in obj)
@@ -62,13 +59,13 @@ def cached(proc):
 			if isinstance(obj, (list, tuple, deque)):
 				return tuple(it.imap(frozen, obj))
 			return obj
-		def _cache_func(*argz, **kwz):
+		def _cache_func(proc, *argz, **kwz):
 			key = id(proc), frozen(argz), frozen(kwz)
 			try: return _cache[key]
 			except KeyError:
 				result = _cache[key] = proc(*argz, **kwz)
 				return result
-		return _cache_func
+	return ft.partial(_cache_func, proc)
 
 
 _counters = dict()
@@ -83,3 +80,23 @@ def countdown(val, message=None, error=StopIteration):
 		_counters[name] -= 1
 		if _counters[name] <= 0: raise error(message or 'countdown')
 	return counter
+
+
+class ProxyObject(object):
+	__slots__ = '_obj', '__weakref__'
+	def __init__(self, *obj):
+		super(ProxyObject, self).__setattr__('_obj', obj)
+
+	def __apply(self, func, *argz):
+		for obj in super(ProxyObject, self).__getattribute__('_obj'):
+			try: return func(obj, *argz)
+			except AttributeError: pass
+		else: raise AttributeError, argz[0]
+
+	def __getattr__(self, name): return self.__apply(getattr, name)
+	def __delattr__(self, name): return self.__apply(delattr, name)
+	def __setattr__(self, name, value): return self.__apply(setattr, name, value)
+
+	def __nonzero__(self): return self.__apply(bool)
+	def __str__(self): return self.__apply(str)
+	def __repr__(self): return self.__apply(repr)
