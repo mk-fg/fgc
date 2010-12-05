@@ -2,15 +2,8 @@ from subprocess import Popen, PIPE, STDOUT
 import os, errno, fcntl
 from time import time
 
-try: # yuck, but epoll just seem to be preferred choice
-	from select import epoll as poll,\
-		EPOLLIN as POLLIN,\
-		EPOLLOUT as POLLOUT,\
-		EPOLLERR as POLLERR,\
-		EPOLLHUP as POLLHUP
-except ImportError:
-	from select import poll,\
-		POLLIN, POLLOUT, POLLERR, POLLHUP
+from select import poll,\
+	POLLIN, POLLOUT, POLLERR, POLLHUP
 
 
 # Exit conditions (states)

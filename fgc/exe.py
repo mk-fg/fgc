@@ -1,42 +1,11 @@
-from fgc.aio import AExec, PIPE, STDOUT, Time, Size, End
 from fgc.compat import string_types
+from fgc.enc import enc_default
+import sys, traceback
 
+max_val_len = 70
 
-_void = None
-def proc(*argz, **kwz):
-	global _void
-	if isinstance(argz[0], string_types):
-		argz = [list(argz)]
-	else:
-		argz = list(argz)
-		argz[0] = list(argz[0])
-	if kwz.get('env') is True:
-		argz[0].insert(0, '/usr/bin/env')
-		del kwz['env']
-	try:
-		if not kwz.pop('silent'): raise KeyError
-	except KeyError: pass
-	else: kwz['stdout'] = kwz['stderr'] = False
-	for kw in ('stdout', 'stderr'):
-		if kwz.get(kw) is False:
-			if not _void: _void = open('/dev/null', 'w')
-			kwz[kw] = _void
-	proc = AExec(*argz, **kwz)
-	if kwz.get('stdin') is False and proc.stdin: proc.stdin.close()
-	return proc
-
-
-def pipe(*argz, **kwz):
-	nkwz = dict(stdin=PIPE, stdout=PIPE, stderr=PIPE)
-	nkwz.update(kwz)
-	return proc(*argz, **nkwz)
-
-
-import traceback
-import sys
-
-def ext_traceback():
-	message = ''
+def ext_traceback(to=None, dump_locals=False):
+	message = u''
 	tb = sys.exc_info()[2]
 	while True:
 		if not tb.tb_next: break
@@ -47,15 +16,22 @@ def ext_traceback():
 		stack.append(frame)
 		frame = frame.f_back
 	stack.reverse()
-	message += traceback.format_exc()
-	message += 'Locals by frame, innermost last\n'
+	err = traceback.format_exc()
+	message += unicode(err)
+	if dump_locals:
+		message += u'Locals by frame, innermost last\n'
+		try: message += unicode(_ext_traceback_locals(stack), enc_default)
+		except Exception as err: message += u'<Epic fail: {0!r}>\n'.format(err)
+	return message if to is None else to.write(message)
+
+def _ext_traceback_locals(stack):
+	message = u''
 	for frame in stack:
-		message += '\nFrame %s in %s at line %s\n' \
-			% (frame.f_code.co_name, frame.f_code.co_filename, frame.f_lineno)
+		message += u'\nFrame {0} in {1} at line {2}\n'\
+			.format(frame.f_code.co_name, frame.f_code.co_filename, frame.f_lineno)
 		for var,val in frame.f_locals.items():
-			message += "  %20s = "%var
-			try: message += "%s\n"%val
-			except:
-				try: message += "%r\n"%val
-				except: message += "<str/repr failed>\n"
+			message += u'{0:>20} = '.format(var)
+			try: val = unicode(val, enc_default)
+			except UnicodeError: val = u'<some gibberish>'
+			message += u'{0!s}\n'.format(val[:max_val_len])
 	return message
