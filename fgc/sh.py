@@ -9,7 +9,7 @@ import itertools as it, operator as op, functools as ft
 
 import os, sys, stat, re, pwd, grp, types
 from os.path import join, islink, isdir
-from os import rmdir, remove
+from os import rmdir
 from fgc import os_ext
 from warnings import warn
 
@@ -65,7 +65,7 @@ def cat(fsrc, fdst, bs=16*1024, flush=False, sync=False):
 
 
 def _cmp(src, dst):
-	if not os.path.isdir(src):
+	if not isdir(src):
 		try: return os.path.samefile(src, dst)
 		except OSError: return False
 	else:
@@ -97,7 +97,7 @@ def cp_meta(src, dst, attrz=False, dereference=True, skip_ts=None):
 
 def cp(src, dst, attrz=False, flush=False, sync=False, skip_ts=None):
 	'Copy data and mode bits ("cp src dst"). The destination may be a dir.'
-	if os.path.isdir(dst): dst = join(dst, os.path.basename(src))
+	if isdir(dst): dst = join(dst, os.path.basename(src))
 	src_stat = (os.stat if dereference else os.lstat)(src)
 	if not any( f(src_stat.st_mode) for f in
 			op.attrgetter('S_ISREG', 'S_ISDIR', 'S_ISLNK')(stat) ):
@@ -115,7 +115,7 @@ def cp_d( src, dst, dereference=True, attrz=False,
 		os.symlink(src_node, dst)
 		return cp_meta( src, dst,
 			dereference=False, attrz=attrz, skip_ts=skip_ts )
-	elif os.path.isdir(src):
+	elif isdir(src):
 		try:
 			os.makedir(dst)
 			return cp_meta(src, dst, attrz=attrz, skip_ts=skip_ts)
@@ -171,7 +171,7 @@ def rm(path, onerror=None):
 	'''
 	try:
 		if stat.S_ISDIR(os.lstat(path).st_mode): rmdir(path)
-		else: remove(path)
+		else: os.remove(path)
 	except OSError as err:
 		if onerror is None: raise Error(err)
 		else: onerror(path, err)
@@ -217,7 +217,7 @@ def mv(src, dst, attrz=True, onerror=None):
 
 from collections import deque
 
-def walk(top, depth=False, relative=False, onerror=None, followlinks=False):
+def walk(top, depth=False, relative=False, onerror=None, follow_links=False):
 	'''Filesystem nodes iterator.
 		Unlike os.walk it does not use recursion and never keeps any more
 			nodes in memory than necessary (listdir returns generator, not lists).
@@ -243,7 +243,7 @@ def walk(top, depth=False, relative=False, onerror=None, followlinks=False):
 			else: stack.append((path, entries))
 
 		for entry in it.imap(ft.partial(join, path), entries):
-			try: chk = isdir(entry) and (followlinks or not islink(entry))
+			try: chk = isdir(entry) and (follow_links or not islink(entry))
 			except (OSError, IOError) as err:
 				if onerror is None: raise
 				else:
@@ -296,7 +296,7 @@ def mkdir(path, mode=0755, uid=-1, gid=-1, recursive=False):
 	ppath = path
 	if recursive:
 		stack = list()
-		while ppath and not os.path.isdir(ppath):
+		while ppath and not isdir(ppath):
 			stack.insert(0, ppath)
 			ppath = os.path.dirname(ppath)
 	else: stack = [path]
