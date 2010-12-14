@@ -10,7 +10,7 @@ sys.dont_write_bytecode = False
 
 setup(
 	name = 'fgc',
-	version = '10.12.9',
+	version = '10.12.10',
 	author = 'Mike Kazantsev',
 	author_email = 'mike_kazantsev@fraggod.net',
 	description = 'Misc stdlib extensions',

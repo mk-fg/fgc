@@ -106,7 +106,7 @@ static PyObject *Gen_DirListing_next(PyObject *self, PyObject *args) {
 
 		PyObject *py_entry_bytes = PyString_FromStringAndSize(
 			entry->d_name, strlen(entry->d_name) );
-		if (py_entry_bytes == NULL) return NULL; // some py error
+		if (py_entry_bytes == NULL) return NULL;
 
 		PyObject *py_entry_uc = PyUnicode_FromEncodedObject(
 			py_entry_bytes, Py_FileSystemDefaultEncoding, "strict");

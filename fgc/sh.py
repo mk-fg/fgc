@@ -52,7 +52,10 @@ def chmod(path, bits, dereference=True, merge=False):
 		bits = stat.S_IMODE(( os.stat
 			if dereference else os.lstat )(path).st_mode) | bits
 	if dereference: os.chmod(path, bits)
-	else: os.lchmod(path, bits)
+	else:
+		try: os.lchmod(path, bits)
+		except AttributeError: # linux does not support symlink modes
+			if dereference or not os.path.islink(path): os.chmod(path, bits)
 
 
 
@@ -85,9 +88,8 @@ def cp_data(src, dst, append=False, flush=True, sync=False):
 
 def cp_meta(src, dst, attrz=False, dereference=True, skip_ts=None):
 	'Copy mode or full attrz (atime, mtime and ownership) from src to dst'
-	chmod, chown, st, utime_set = op.attrgetter(
-		(os.chmod, os.chown, os.stat, os.utimes) if dereference
-			else (os.lchmod, os.lchown, os.lstat, os_ext.lutimes) )(os)
+	chmod, chown, st, utime_set = (os.chmod, os.chown, os.stat, os.utime)\
+		if dereference else (os.lchmod, os.lchown, os.lstat, os_ext.lutimes)
 	st = st(src) if isinstance(src, types.StringTypes) else src
 	chmod(dst, stat.S_IMODE(st.st_mode))
 	if (attrz if skip_ts is None else not skip_ts): utime_set(dst, (st.st_atime, st.st_mtime))
@@ -95,7 +97,7 @@ def cp_meta(src, dst, attrz=False, dereference=True, skip_ts=None):
 	return st
 
 
-def cp(src, dst, attrz=False, flush=False, sync=False, skip_ts=None):
+def cp(src, dst, attrz=False, dereference=True, flush=False, sync=False, skip_ts=None):
 	'Copy data and mode bits ("cp src dst"). The destination may be a dir.'
 	if isdir(dst): dst = join(dst, os.path.basename(src))
 	src_stat = (os.stat if dereference else os.lstat)(src)
@@ -174,24 +176,21 @@ def rm(path, onerror=None):
 		else: os.remove(path)
 	except OSError as err:
 		if onerror is None: raise Error(err)
-		else: onerror(path, err)
+		elif onerror is not False: onerror(path, err)
 
 
-def rr(path, onerror=None, keep_root=False, **crawl_kwz):
+def rr(path, onerror=False, keep_root=False, **crawl_kwz):
 	'''
 	Recursively remove path.
 
 	If exception(s) occur, an Error is raised with original error.
 	If onerror is passed, itll be called on every raised exception.
 	'''
-	if onerror is False: errors, onerror = list(), lambda *args: errors.append(args)
-	else: errors = None
+	if onerror is False: onerror = lambda *args: None
 
 	for entity in crawl(path, depth=True,
 		onerror=onerror, **crawl_kwz): rm(entity, onerror=onerror)
 	if not keep_root: rm(path, onerror)
-
-	if errors is not None: return errors
 
 
 def mv(src, dst, attrz=True, onerror=None):
@@ -270,7 +269,7 @@ def crawl(top, include=list(), exclude=list(),
 	include, exclude = ( [re.compile(patterns)] if isinstance( patterns,
 			types.StringTypes ) else list(re.compile(pat) for pat in patterns)
 		for patterns in (include, exclude) )
-	path_rel = op.itemgetter(slice(len(top), None))
+	path_rel = lambda x, s=op.itemgetter(slice(len(top), None)): s(x).lstrip('/')
 
 	iterator, chk = walk(top, **walk_kwz), True
 	entry = next(iterator)
