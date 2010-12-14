@@ -1,95 +1,67 @@
-'''
-Enhanced clone of standard py module "shutil".
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals, print_function
 
-Adds owner/group transferring functionality and some other params.
-Optimized and simplified a lot, since original implementation was rubbish.
-'''
 
-import os, sys, stat, re, pwd, grp
-from os.path import join, islink
-from os import walk, rmdir
+'My extended version of standard py module "shutil"'
+
+
+import itertools as it, operator as op, functools as ft
+
+import os, sys, stat, re, pwd, grp, types
+from os.path import join, islink, isdir
+from os import rmdir, remove
+from fgc import os_ext
 from warnings import warn
 
 
 
-class Error(EnvironmentError):
-	'''Something went wrong'''
+class Error(Exception): pass
 
 
-def getids(user): return uid(user), gid(user)
-def resolve_ids(tuid=-1, tgid=-1):
-	if tuid != -1 and tgid == -1 and ':' in tuid: # user:group spec
-		tuid, tgid = tuid.split(':')
-	return uid(tuid), gid(tgid)
+def resolve_ids(uid=-1, gid=-1):
+	if uid is None: uid = -1
+	if gid is None: gid = -1
+	if isinstance(uid, types.StringTypes) and uid != -1\
+		and gid == -1 and ':' in uid: uid, gid = uid.split(':', 1)
+	return to_uid(uid), to_gid(gid)
 
-def uid(user):
-	try: return int(user)
-	except ValueError:
-		return pwd.getpwnam(user).pw_uid
-def gid(group):
-	try: return int(group)
-	except ValueError:
-		return grp.getgrnam(group).gr_gid
-def uname(uid):
+def to_uid(user):
+	return int(user) if isinstance(user, int)\
+		else pwd.getpwnam(user).pw_uid
+def to_gid(group):
+	return int(group) if isinstance(group, int)\
+		else grp.getgrnam(group).gr_gid
+
+def to_uname(uid):
 	try: return pwd.getpwuid(uid).pw_name
 	except KeyError: return uid
-def gname(gid):
+def to_gname(gid):
 	try: return grp.getgrgid(gid).gr_name
 	except KeyError: return gid
 
-def mode(mode):
-	if mode.isdigit():
-		if len(mode) < 4: mode = '0'+mode
-		while len(mode) < 4: mode += '0'
-		return int(mode, 8)
-	elif len(mode) == 9:
-		val = 0
-		bits = (
-			0400, # r-- --- ---
-			0200, # -w- --- ---
-			0100, # --x --- ---
-			0040, # --- r-- ---
-			0020, # --- -w- ---
-			0010, # --- --x ---
-			0004, # --- --- r--
-			0002, # --- --- -w-
-			0001 )# --- --- --x
-		for n in xrange(len(bits)):
-			if mode[n] != '-': val |= bits[n]
-		return val
-	else:
-		raise Error, 'Unrecognized file system mode format: %s'%mode
 
-
-def chown(path, tuid=-1, tgid=-1,
-		recursive=False, dereference=True, resolve=False):
-	if resolve: tuid, tgid = resolve_ids(tuid, tgid)
+def chown(path, uid=-1, gid=-1, recursive=False, dereference=True):
+	uid, gid = resolve_ids(uid, gid)
 	op = os.chown if dereference else os.lchown
 	if recursive:
-		for node in it.imap( ft.partial(join, path),
-			crawl(path, dirs=True) ): op(node, tuid, tgid)
-	op(path, tuid, tgid)
+		for node in walk(path): op(node, uid, gid)
+	op(path, uid, gid)
+
 def chmod(path, bits, dereference=True, merge=False):
 	if merge:
 		bits = stat.S_IMODE(( os.stat
 			if dereference else os.lstat )(path).st_mode) | bits
 	if dereference: os.chmod(path, bits)
-	else:
-		try: os.lchmod(path, bits)
-		except AttributeError: # no support for symlink modes
-			if not islink(path): os.chmod(path, bits)
+	else: os.lchmod(path, bits)
 
 
-def cat(fsrc, fdst, length=16*1024, recode=None, sync=False):
-	'''copy data from file-like object fsrc to file-like object fdst'''
-	while True:
-		buf = fsrc.read(length)
-		if not buf: break
-		if recode:
-			from enc import recode as rec
-			rec(src=fsrc, dst_enc=recode, dst=fdst)
-		else: fdst.write(buf)
-	if sync: fdst.flush()
+
+from shutil import copyfileobj
+
+def cat(fsrc, fdst, bs=16*1024, flush=False, sync=False):
+	copyfileobj(fsrc, fdst, bs)
+	if flush or sync: fdst.flush()
+	if sync: os.fsync(fdst.fileno())
 
 
 def _cmp(src, dst):
@@ -97,82 +69,73 @@ def _cmp(src, dst):
 		try: return os.path.samefile(src, dst)
 		except OSError: return False
 	else:
-		return (os.path.normcase(os.path.abspath(src)) ==
-			os.path.normcase(os.path.abspath(dst)))
+		return ( os.path.normcase(os.path.abspath(src))
+			== os.path.normcase(os.path.abspath(dst)) )
 
 
-def cp_cat(src, dst, recode=None, append=False, sync=True):
-	'''Copy data from src to dst'''
-	if _cmp(src, dst): raise Error, "'%s' and '%s' are the same file" %(src,dst)
-	fsrc = None
-	fdst = None
-	try:
-		fsrc = open(src, 'rb')
-		fdst = open(dst, 'wb' if not append else 'ab')
-		cat(fsrc, fdst, recode=recode, sync=sync)
-	except IOError, err: raise Error, str(err)
-	finally:
-		if fdst: fdst.close()
-		if fsrc: fsrc.close()
+def cp_data(src, dst, append=False, flush=True, sync=False):
+	'Copy data from src to dst'
+	if _cmp(src, dst):
+		raise Error('{0!r} and {1!r} are the same file'.format(src, dst))
+	with open(src, 'rb') as fsrc,\
+			open(dst, 'wb' if not append else 'ab') as fdst:
+		try: cat(fsrc, fdst, flush=flush, sync=sync)
+		except IOError as err: raise Error(err)
 
 
-def cp(src, dst, attrz=False, sync=False, skip_ts=None):
-	'''Copy data and mode bits ("cp src dst"). The destination may be a dir.'''
-	if os.path.isdir(dst): dst = join(dst, os.path.basename(src))
-	cp_cat(src, dst, sync=sync)
-	cp_stat(src, dst, attrz=attrz, skip_ts=skip_ts)
-
-
-def cp_stat(src, dst, attrz=False, dereference=True, skip_ts=None):
-	'''Copy mode or full attrz (atime, mtime and ownership) from src to dst'''
-	if dereference:
-		chmod = os.chmod
-		chown = os.chown
-		st = os.stat(src) if isinstance(src, (str, unicode)) else src
-	else:
-		st = os.lstat(src) if isinstance(src, (str, unicode)) else src
-		try:
-			chmod = os.lchmod # py 2.6 only
-		except AttributeError:
-			if islink(dst):
-				chmod = lambda dst,mode: True # don't change any modes
-			else: chmod = os.chmod
-		chown = os.lchown
+def cp_meta(src, dst, attrz=False, dereference=True, skip_ts=None):
+	'Copy mode or full attrz (atime, mtime and ownership) from src to dst'
+	chmod, chown, st, utime_set = op.attrgetter(
+		(os.chmod, os.chown, os.stat, os.utimes) if dereference
+			else (os.lchmod, os.lchown, os.lstat, os_ext.lutimes) )(os)
+	st = st(src) if isinstance(src, types.StringTypes) else src
 	chmod(dst, stat.S_IMODE(st.st_mode))
-	if skip_ts is None: skip_ts = not attrz
-	if dereference and not skip_ts:
-		os.utime(dst, (st.st_atime, st.st_mtime)) # not for symlinks
+	if (attrz if skip_ts is None else not skip_ts): utime_set(dst, (st.st_atime, st.st_mtime))
 	if attrz: chown(dst, st.st_uid, st.st_gid)
 	return st
 
 
+def cp(src, dst, attrz=False, flush=False, sync=False, skip_ts=None):
+	'Copy data and mode bits ("cp src dst"). The destination may be a dir.'
+	if os.path.isdir(dst): dst = join(dst, os.path.basename(src))
+	src_stat = (os.stat if dereference else os.lstat)(src)
+	if not any( f(src_stat.st_mode) for f in
+			op.attrgetter('S_ISREG', 'S_ISDIR', 'S_ISLNK')(stat) ):
+		raise Error('Node is not a file/dir/link, cp of these is not supported.')
+	cp_data(src, dst, flush=flush, sync=sync)
+	return cp_meta(src_stat, dst, attrz=attrz, skip_ts=skip_ts)
+
 cp_p = lambda src,dst: cp(src, dst, attrz=True)
 
-
-def cp_d(src, dst, symlinks=False, attrz=False, skip_ts=None):
-	'''Copy only one node, whatever it is.'''
-	if symlinks and islink(src):
+def cp_d( src, dst, dereference=True, attrz=False,
+		flush=False, sync=False, skip_ts=None ):
+	'Copy only one node, whatever it is.'
+	if not dereference and islink(src):
 		src_node = os.readlink(src)
 		os.symlink(src_node, dst)
+		return cp_meta( src, dst,
+			dereference=False, attrz=attrz, skip_ts=skip_ts )
 	elif os.path.isdir(src):
-		try: os.makedirs(dst)
-		except OSError, err: raise Error, str(err)
-	else: cp(src, dst, attrz=attrz)
-	cp_stat(src, dst, attrz=attrz, skip_ts=skip_ts)
-	# TODO: What about devices, sockets etc.?
+		try:
+			os.makedir(dst)
+			return cp_meta(src, dst, attrz=attrz, skip_ts=skip_ts)
+		except OSError as err: raise Error(err)
+	else: return cp(src, dst, attrz=attrz, skip_ts=skip_ts)
 
 
-def cp_r( src, dst, symlinks=False,
-		attrz=False, skip=[], onerror=None, atom=cp_d ):
+def cp_r( src, dst, dereference=True,
+		attrz=False, onerror=False, atom=cp_d, **crawl_kwz ):
 	'''
 	Recursively copy a directory tree, preserving mode/stats.
 
 	The destination directory must not already exist.
 	If exception(s) occur, an Error is raised with a list of reasons.
-	If onerror is passed, itll be called on every raised exception.
-	'skip' pattern(s) will be skipped.
+	If onerror is passed, it'll be called on every raised exception.
+		If it's False (default), exceptions are not raised, but all errors are collected
+		and returned as a list with the same tuples as arguments to the callable.
+		None will raise Error and halt execution on the first occasion.
 
-	If the optional symlinks flag is true, symbolic links in the
+	If the optional dereference flag is false, symbolic links in the
 	source tree result in symbolic links in the destination tree; if
 	it is false, the contents of the files pointed to by symbolic
 	links are copied.
@@ -180,25 +143,23 @@ def cp_r( src, dst, symlinks=False,
 	Atom argument should be a callable, to be called in the same
 	way as cp_d function to transfer each individual file.
 	'''
-	try: skip = [re.compile(skip)]
-	except TypeError: skip = [re.compile(pat) for pat in skip]
+	skip = [re.compile(skip)] if isinstance( skip,
+		types.StringTypes ) else list(re.compile(pat) for pat in skip)
 	atom(src, dst, attrz=attrz)
-	if not onerror:
-		errors = []
-		onerror = lambda *args: errors.append(args)
-	for entity in crawl(src, dirs=True, topdown=True, onerror=onerror):
-		for pat in skip:
-			if pat.match(entity): break
-		else:
-			try:
-				src_node = join(src, entity)
-				dst_node = join(dst, entity)
-				atom(src_node, dst_node, symlinks=symlinks, attrz=attrz)
-			except (IOError, OSError, Error), err:
-				onerror(src_node, dst_node, str(err))
-	try:
-		if errors: raise Error, errors
-	except NameError: pass
+
+	if onerror is False: errors, onerror = list(), lambda *args: errors.append(args)
+	else: errors = None
+
+	for entity in crawl( src, depth=False,
+			relative=True, onerror=onerror, **crawl_kwz ):
+		try:
+			src_node, dst_node = join(src, entity), join(dst, entity)
+			atom(src_node, dst_node, dereference=dereference, attrz=attrz)
+		except (IOError, OSError, Error) as err:
+			if onerror is None: raise Error(err)
+			else: onerror(src_node, dst_node, err)
+
+	if errors is not None: return errors
 
 
 def rm(path, onerror=None):
@@ -208,41 +169,32 @@ def rm(path, onerror=None):
 	If exception(s) occur, an Error is raised with original error.
 	If onerror is passed, itll be called on exception.
 	'''
-	try: mode = os.lstat(path).st_mode
-	except OSError: mode = 0
 	try:
-		if stat.S_ISDIR(mode): rmdir(path)
-		else: os.remove(path)
-	except OSError, err:
-		if onerror: onerror(path, err)
-		elif onerror is not False: raise Error, err
+		if stat.S_ISDIR(os.lstat(path).st_mode): rmdir(path)
+		else: remove(path)
+	except OSError as err:
+		if onerror is None: raise Error(err)
+		else: onerror(path, err)
 
 
-def rr(path, onerror=None, preserve=[], keep_root=False):
+def rr(path, onerror=None, keep_root=False, **crawl_kwz):
 	'''
 	Recursively remove path.
 
 	If exception(s) occur, an Error is raised with original error.
 	If onerror is passed, itll be called on every raised exception.
-	'preserve' pattern(s) will be skipped.
-
-	Also includes original path preservation flag.
 	'''
-	try: preserve = [re.compile(preserve)]
-	except TypeError: preserve = [re.compile(pat) for pat in preserve]
-	for entity in crawl(path, dirs=True, topdown=False, onerror=onerror):
-		for pat in preserve:
-			if pat.match(entity): break
-		else:
-			try: rm(join(path, entity), onerror=onerror)
-			except Error, err:
-				if not (preserve and os.path.isdir(path)): # Quite possible, but not 100%
-					if not onerror: raise
-					else: onerror(err)
-	if not (preserve or keep_root): rm(path, onerror)
+	if onerror is False: errors, onerror = list(), lambda *args: errors.append(args)
+	else: errors = None
+
+	for entity in crawl(path, depth=True,
+		onerror=onerror, **crawl_kwz): rm(entity, onerror=onerror)
+	if not keep_root: rm(path, onerror)
+
+	if errors is not None: return errors
 
 
-def mv(src, dst, attrz=True):
+def mv(src, dst, attrz=True, onerror=None):
 	'''
 	Recursively move a path.
 
@@ -256,56 +208,94 @@ def mv(src, dst, attrz=True):
 	'''
 	try: os.rename(src, dst)
 	except OSError:
-		if _cmp(src, dst): raise Error, "'%s' and '%s' are the same object."%(src,dst)
-		cp_r( src, dst, symlinks=True,
-			attrz=attrz, atom=ft.partial(cp_d, skip_ts=False) )
-		rr(src)
+		if _cmp(src, dst): raise Error('{0!r} and {1!r} are the same object.'.format(src,dst))
+		err1 = cp_r( src, dst, dereference=False, attrz=attrz,
+			onerror=onerror, atom=ft.partial(cp_d, skip_ts=False) )
+		err2 = rr(src, onerror=onerror)
+		if err1 is not None: return err1 + err2
 
 
-def crawl( top, filter=None, exclude=None,
-		dirs=True, topdown=True, onerror=False, dirs_only=False ):
-	'''Filesystem nodes iterator.'''
-	nodes = []
-	try: filter = filter and [re.compile(filter)]
-	except TypeError: filter = [re.compile(regex) for regex in filter]
-	try: exclude = exclude and [re.compile(exclude)]
-	except TypeError: exclude = [re.compile(regex) for regex in exclude]
-	for root, d, f in walk(top, topdown=topdown):
-		root = root[len(top):].lstrip('/')
-		if dirs_only: f = d
-		elif dirs: f = d + f # dirs first
-		for name in f:
-			path = join(root, name)
-			if exclude:
-				for regex in exclude:
-					match = regex.search(path)
-					if match: break
-				else: match = None
-				if match:
-					if onerror: onerror(crawl, path, sys.exc_info())
-					continue
-			if filter:
-				for regex in filter:
-					if regex.search(path): break
+from collections import deque
+
+def walk(top, depth=False, relative=False, onerror=None, followlinks=False):
+	'''Filesystem nodes iterator.
+		Unlike os.walk it does not use recursion and never keeps any more
+			nodes in memory than necessary (listdir returns generator, not lists).
+		file/dir nodes' ordering in the same path is undefined.'''
+	if not depth: # special case for root node
+		rec_check = yield top
+		if rec_check is False: raise StopIteration
+
+	stack = deque([top])
+
+	while stack:
+		entries = stack[-1]
+		if not isinstance(entries, types.StringTypes): path, entries = entries
+		else:
+			stack.pop()
+			try: path, entries = entries, os_ext.listdir(entries)
+			except (OSError, IOError) as err:
+				if depth: yield entries # no recursion here, so just yield
+				if onerror is None: raise
 				else:
-					if onerror: onerror(crawl, path, sys.exc_info())
+					onerror(entries, err)
 					continue
-			yield path
+			else: stack.append((path, entries))
+
+		for entry in it.imap(ft.partial(join, path), entries):
+			try: chk = isdir(entry) and (followlinks or not islink(entry))
+			except (OSError, IOError) as err:
+				if onerror is None: raise
+				else:
+					onerror(entry, err)
+					continue # only onerror should handle these
+			if not chk: yield entry
+			elif depth: # extend stack, recurse dir
+				stack.append(entry)
+				break
+			elif (yield entry) is not False: stack.appendleft(entry)
+		else: # done here, move up the stack
+			if depth: yield path
+			stack.pop()
 
 
-def touch(path, mode=0644, tuid=-1, tgid=-1, resolve=False):
-	'''Create or truncate a file with given stats.'''
+def crawl(top, include=list(), exclude=list(),
+		relative=False, recursive_patterns=False, **walk_kwz):
+	'''Filesystem nodes iterator with filtering.
+		With relative=True only the part of path after "top" is returned.
+		"exclude" patterns are applied before "include",
+			both are matched against "relative" part only.
+		"recursive_patterns" flag enables include/exclude patterns to stop recursion.
+			Ignored when depth=True.'''
+	include, exclude = ( [re.compile(patterns)] if isinstance( patterns,
+			types.StringTypes ) else list(re.compile(pat) for pat in patterns)
+		for patterns in (include, exclude) )
+	path_rel = op.itemgetter(slice(len(top), None))
+
+	iterator, chk = walk(top, **walk_kwz), True
+	entry = next(iterator)
+	while True:
+		entry_rel = path_rel(entry)
+		chk = not any(regex.search(entry_rel) for regex in exclude)\
+			and (not include or any(regex.search(entry_rel) for regex in include))
+		if chk: yield entry if not relative else entry_rel
+		try: entry = iterator.send(not recursive_patterns or chk)
+		except StopIteration: break
+
+
+def touch(path, mode=0644, uid=-1, gid=-1):
+	'Create or truncate a file with given stats.'
 	open(path, 'w')
 	os.chmod(path, mode)
-	chown(path, tuid, tgid, resolve=resolve)
+	chown(path, *resolve_ids(uid, gid))
 
 
-def mkdir(path, mode=0755, tuid=-1, tgid=-1, recursive=False, resolve=False):
-	'''Create a dir with given stats.'''
-	if resolve: tuid, tgid = resolve_ids(tuid, tgid)
+def mkdir(path, mode=0755, uid=-1, gid=-1, recursive=False):
+	'Create a dir with given stats.'
+	uid, gid = resolve_ids(uid, gid)
 	ppath = path
 	if recursive:
-		stack = []
+		stack = list()
 		while ppath and not os.path.isdir(ppath):
 			stack.insert(0, ppath)
 			ppath = os.path.dirname(ppath)
@@ -313,12 +303,12 @@ def mkdir(path, mode=0755, tuid=-1, tgid=-1, recursive=False, resolve=False):
 	for ppath in stack:
 		try:
 			os.mkdir(ppath, mode)
-			if tuid != -1 or tgid != -1: os.chown(ppath, tuid, tgid)
-		except OSError, err: raise Error, err
+			if uid != -1 or gid != -1: os.chown(ppath, uid, gid)
+		except OSError as err: raise Error(err)
 
 
 def ln(src, dst, hard=False, recursive=False):
-	'''Create a link'''
+	'Create a link'
 	if recursive:
 		# Quite confusing flag
 		# It means just to create dir in which link should reside
@@ -332,261 +322,63 @@ def ln(src, dst, hard=False, recursive=False):
 
 
 from glob import iglob
-import itertools as it
 _glob_cbex = re.compile(r'\{[^}]+\}')
 def glob(pattern):
-	'''Globbing with braces expansion'''
+	'Globbing with curly-brace expansion'
 	subs = list()
 	while True:
 		ex = _glob_cbex.search(pattern)
 		if not ex: break
 		subs.append(ex.group(0)[1:-1].split(','))
-		pattern = pattern[:ex.span()[0]] + '%s' + pattern[ex.span()[1]:]
-	return it.chain.from_iterable( iglob(pattern%combo) for combo in it.product(*subs) ) if subs else iglob(pattern)
+		pattern = pattern[:ex.span()[0]] + '{}' + pattern[ex.span()[1]:]
+	return it.chain.from_iterable( iglob(pattern.format(combo))\
+		for combo in it.product(*subs) ) if subs else iglob(pattern)
 
 
 def df(path):
-	'''Get (size, available) disk space, bytes'''
+	'Get (size, available) disk space, bytes'
 	df = os.statvfs(path)
 	return (df.f_blocks * df.f_bsize, df.f_bavail * df.f_bsize)
 
 
-from dta import chain
-from collections import deque
-
-class GC:
-	'''Garbage Collector object
-		Works with:
-			callable - run
-			iterable - recurse to each element
-			file - close
-			string - rm path'''
-	# TODO: Add weakref option
-	__slots__ = ()
-	__actz = deque()
-	def __init__(self, *actz):
-		for act in chain(actz): self.__actz.append(act)
-	def __del__(self):
-		while self.__actz:
-			act = self.__actz.popleft() # destroys reference to object
-			try: act() # isinstance of Callable check fails here w/ some weird error
-			except TypeError: pass
-			else: continue
-			if isinstance(act, file): act.close()
-			elif isinstance(act, (str, unicode)): rm(act, onerror=False)
-			else: warn('Unknown garbage type: %r'%act)
-	def add(self, *actz):
-		for act in actz:
-			if not isinstance(act, (str, unicode)):
-				try: self.__actz.extend(act)
-				except TypeError: self.__actz.append(act)
-			else: self.__actz.append(act)
-_gc = GC()
-
-def gc(*argz): return _gc.add(*argz)
-
-
-from tempfile import mkstemp
-
-def mktemp(path, mode=None, tuid=-1, tgid=-1, atomic=False, sync=False):
-	'''Helper function to return tmp fhandle and callback to move it into a given place'''
-	tmp_path, tmp = os.path.split(path)
-	tmp_path = mkstemp(prefix=tmp+os.extsep, dir=tmp_path)[1]
-	tmp = open(tmp_path, 'wb+')
-	gc(tmp, tmp_path) # to collect leftover
-	post_stat = list()
-	if mode:
-		post_stat.append(ft.partial(chmod, mode=mode))
-	if tuid != -1 or tgid != -1:
-		post_stat.append(ft.partial(chown, tuid=tuid, tgid=tgid))
-	pre_stat = os.path.exists(path) and os.stat(path) # for atomic commits
-
-	def commit(sync=sync, atomic=atomic): # default values from parent function
-		tmp_sync, dst_path = False, path # localize vars
-		try: tmp.flush() # to ensure that next read gets all data
-		except ValueError:
-			if not atomic:
-				cp_cat(tmp_path, dst_path, sync=sync) # tmp was closed already
-				tmp_sync = True # to indicate that we're done with it
-		if atomic:
-			tmp.close()
-			try:
-				if not post_stat:
-					st = cp_stat(pre_stat or dst_path, tmp_path,
-						attrz=True, dereference=True, skip_ts=True) # copy attrz from dst
-				else:
-					st = pre_stat or os.stat(dst_path)
-					while post_stat: post_stat.pop()(tmp_path) # use passed attrz
-				if stat.S_ISLNK(st.st_mode): dst_path = os.path.readlink(path)
-			except OSError: pass
-			mv(tmp_path, dst_path) # atomic for same fs, a bit dirty otherwise
-		elif not tmp_sync: # file is still opened
-			tmp.seek(0)
-			with open(dst_path, 'w') as src:
-				cat(tmp, src)
-				if sync: src.flush()
-			tmp.close()
-		if post_stat: # for closed non-atomic or fuckup cases
-			while post_stat: post_stat.pop()(dst_path) # set passed attrz
-		rm(tmp_path, onerror=False)
-
-	return tmp, commit
-
-
-from zlib import crc32 as zlib_crc32
-import functools as ft
-def crc32(stream, bs=8192):
-	'''Calculate crc32 of a given stream, which can be specified as a file-like object,
-		string or a sequence / iterator of objects, which ll be spliced via data.chain function.
-		Note: it may make sense for iterators, but strings can be compared directly.'''
-	cs, block = zlib_crc32(''), True
-	stream = ft.partial(stream.read, bs) if hasattr(stream, 'read') else (
-		iter(stream).next if not isinstance(stream, (str, unicode)) else chain(stream).next )
-	while block:
-		try: block = stream()
-		except StopIteration: block = ''
-		cs = zlib_crc32(block, cs)
-	return abs(cs)
-
-
-from time import sleep
-import fcntl
-
-class LockError(EnvironmentError):
-	'''Inability to acquire lock'''
-
-class Flock(object):
-	'''Filesystem lock'''
-	gc_unlock = True
-
-	@property
-	def _type(self): return fcntl.LOCK_EX if not self._shared else fcntl.LOCK_SH
-
-	def __init__(self, path, make=False, shared=False, remove=None, timeout=None):
-		warn( 'Usage of sh.Flock class is unreliable'
-			' and deprecated - use sh.flock2 instead', DeprecationWarning )
-		self.locked = self._del = False
-		if remove == None: remove = make
-		try: self._lock = open(path)
-		except (IOError,OSError), err:
-			if make:
-				touch(path)
-				self._lock = open(path)
-			else: raise Error, err
-		if remove: self._del = path
-		self._shared = shared
-		if timeout is not None: self.acquire(timeout)
-
-	def check(self, grab=False):
-		if self.locked: return self.locked
-		try: fcntl.flock(self._lock, self._type | fcntl.LOCK_NB)
-		except IOError, ex:
-			if not grab: return False
-			else: return None # checked internally
-		else:
-			if grab:
-				self.locked = True
-				return self
-			else:
-				fcntl.flock(self._lock, fcntl.LOCK_UN)
-				return False
-
-	def acquire(self, timeout=False, interval=5, shared=None, release=False):
-		# Lock is not released before re-locking by default:
-		#  this way will ensure consistency but WILL
-		#  cause deadlock if two scripts will call it on one file.
-		# Alternative way is via release arg.
-		if not self.locked or shared != self._shared:
-			if release and self.locked: self.release() # break consistency, avoid deadlocks
-			if not shared is None: self._shared = shared # update lock type for all future calls as well
-			if not timeout:
-				fcntl.flock(self._lock, self._type)
-				self.locked = True
-			else:
-				for attempt in xrange(0, timeout, int(interval)):
-					attempt = self.check(True)
-					if attempt: break
-					else: sleep(interval)
-				else: raise LockError('Unable to acquire lock: %s'%self._lock)
-		return self
-
-	def release(self, cleanup=True):
-		try: fcntl.flock(self._lock, fcntl.LOCK_UN)
-		except: pass
-		self.locked = False
-		if cleanup and self._del: rm(self._del, onerror=False)
-		return self
-
-	def __del__(self):
-		if self.gc_unlock and self.locked:
-			self.release()
-			if self._del: rm(self._del, onerror=False)
-
-	__str__ = __repr__ = __hash__ = lambda s: '<FileLock %s>'%s._lock
-	def __enter__(self): return self.acquire()
-	def __exit__(self, ex_type, ex_val, ex_trace): self.release()
-
-flock = Flock # deprecated legacy alias
-
-
-
 from time import time
-import signal, errno
+import signal, errno, fcntl
 
-def flock2(path, contents=None, add_newline=True, append=False, block=False):
-	'Simplier and more reliable flock function'
+class LockError(Error): pass
+
+def flock( filespec, contents=None,
+		add_newline=True, block=False, fcntl_args=tuple() ):
+	'''Simple and supposedly-reliable advisory file locking.
+		Uses SIGALRM for timeout, if "block" argument is specified.
+		filespec can be a path (bytes/unicode), fd (int) or file object.'''
 
 	try:
-		lock = open(path, ('r+' if os.path.exists(path) else 'w') if not append else 'a+')
-		if not block: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+		lock = open(filespec, 'a+') if isinstance(filespec, types.StringTypes)\
+			else (filespec if not isinstance(filespec, int) else os.fopen(filespec))
+		if not block: fcntl.lockf(lock, fcntl.LOCK_EX | fcntl.LOCK_NB, *fcntl_args)
 		else:
 			prev_alarm = signal.alarm(block)
 			if prev_alarm: prev_alarm = time() + prev_alarm
 			prev_alarm_handler = signal.signal(signal.SIGALRM, lambda sig,frm: None)
-			try: fcntl.flock(lock, fcntl.LOCK_EX)
+			try: fcntl.lockf(lock, fcntl.LOCK_EX, *fcntl_args)
 			except (OSError, IOError) as err:
 				if err.errno != errno.EINTR: raise
-				else: raise LockError('Timeout has passed ({0})'.format(block))
+				else: raise LockError('Timeout has passed ({})'.format(block))
 			finally:
+				signal.alarm(0) # so further calls won't get interrupted
 				signal.signal(signal.SIGALRM, prev_alarm_handler)
 				if prev_alarm:
 					prev_alarm = prev_alarm - time()
 					if prev_alarm > 0: signal.alarm(prev_alarm)
-					else:
-						signal.alarm(0)
-						os.kill(os.getpid(), signal.SIGALRM)
-				else: signal.alarm(0)
+					else: os.kill(os.getpid(), signal.SIGALRM)
 
 	except (IOError, OSError, LockError) as ex:
-		raise LockError('Unable to acquire lockfile ({0})): {1}'.format(path, ex))
+		raise LockError('Unable to acquire lockfile ({})): {}'.format(filespec, ex))
 
 	if contents:
-		if not append:
-			lock.seek(0, os.SEEK_SET)
-			lock.truncate()
-		lock.write(str(contents) + '\n' if add_newline else '')
+		lock.seek(0, os.SEEK_SET)
+		lock.truncate()
+		lock.write(b'{}{}'.format(contents, '\n' if add_newline else ''))
 		lock.flush()
+
 	return lock
-
-
-
-def multi_lock(*paths, **kwz):
-	try: timeout = kwz.pop('timeout')
-	except: deadline = None
-	else: deadline = time() + timeout
-	locks = list()
-	while True:
-		for path in paths:
-			if isinstance(path, (tuple, list)):
-				path, subkwz = path
-				kwz.update(subkwz)
-			lock = flock(path, **kwz).check(grab=True)
-			if not lock: break
-			else: locks.append(lock)
-		else: break
-		for lock in locks: lock.release()
-		if deadline and time() > deadline:
-			raise LockError('Unable to acquire locks: %s'%', '.join(it.imap(str, paths)))
-		sleep(min(5, deadline-time() if deadline else 5))
-	return locks
-

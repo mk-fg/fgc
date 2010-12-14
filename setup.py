@@ -10,7 +10,7 @@ sys.dont_write_bytecode = False
 
 setup(
 	name = 'fgc',
-	version = '10.12.6',
+	version = '10.12.7',
 	author = 'Mike Kazantsev',
 	author_email = 'mike_kazantsev@fraggod.net',
 	description = 'Misc stdlib extensions',
@@ -28,6 +28,7 @@ setup(
 		'Topic :: Utilities',
 		'License :: OSI Approved :: BSD License' ],
 	ext_modules  = [
+		Extension(name='fgc.os_ext', sources=['os_ext.c']),
 		Extension(name='fgc.psctl', sources=['psctl.c'], include_dirs=['/usr/src/linux/include']),
 		Extension(name='fgc.strcaps', sources=['strcaps.c'], libraries=['cap']),
 		Extension(name='fgc.stracl', sources=['stracl.c'], libraries=['acl']) ] )
