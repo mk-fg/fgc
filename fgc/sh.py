@@ -331,7 +331,7 @@ def glob(pattern):
 		if not ex: break
 		subs.append(ex.group(0)[1:-1].split(','))
 		pattern = pattern[:ex.span()[0]] + '{}' + pattern[ex.span()[1]:]
-	return it.chain.from_iterable( iglob(pattern.format(combo))\
+	return it.chain.from_iterable( iglob(pattern.format(*combo))\
 		for combo in it.product(*subs) ) if subs else iglob(pattern)
 
 
