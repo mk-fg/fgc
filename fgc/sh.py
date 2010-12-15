@@ -384,3 +384,11 @@ def flock( filespec, contents=None,
 		lock.flush()
 
 	return lock
+
+
+from weakref import ref
+_gc_beacon = set() # simple weakref'able collectable object
+gc_refs = list()
+def gc(*argz, **kwz):
+	gc_refs.append(ref( _gc_beacon, argz[0] if not kwz
+		and len(argz) == 1 and callable(argz[0]) else ft.partial(*argz, **kwz) ))
