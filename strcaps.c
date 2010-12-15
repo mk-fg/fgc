@@ -27,7 +27,6 @@ strcaps_get_file(PyObject *self, PyObject *args) { // (int) fd / (str) path / (f
 		if (errno == ENODATA) { strcaps = "\0"; strcaps_len = 0; }
 		else {
 			PyErr_SetFromErrno(PyExc_OSError);
-			free(strcaps);
 			return NULL; } }
 	else strcaps = cap_to_text(caps, &strcaps_len);
 	cap_free(caps);
@@ -54,13 +53,14 @@ strcaps_get_process(PyObject *self, PyObject *args) { // (int) pid or None
 static PyObject *
 strcaps_set_file(PyObject *self, PyObject *args) { // (str) caps, (int) fd / (str) path / (file) file
 	char *strcaps; PyObject *file;
-	if (!PyArg_ParseTuple(args, "sO", &strcaps, &file)) return NULL;
+	if (!PyArg_ParseTuple(args, "etO",
+		Py_FileSystemDefaultEncoding, &strcaps, &file)) return NULL;
 	cap_t caps;
 	if ((caps = cap_from_text(strcaps)) == NULL) {
 		PyErr_SetString(PyExc_ValueError, "Invalid capability specification");
-		free(strcaps);
+		PyMem_Free(strcaps);
 		return NULL; }
-	free(strcaps);
+	PyMem_Free(strcaps);
 	int err;
 	if (PyFile_Check(file)) err = cap_set_fd(PyObject_AsFileDescriptor(file), caps);
 	else if (PyInt_Check(file)) err = cap_set_fd(PyInt_AsLong(file), caps);
@@ -85,13 +85,14 @@ strcaps_set_file(PyObject *self, PyObject *args) { // (str) caps, (int) fd / (st
 static PyObject *
 strcaps_set_process(PyObject *self, PyObject *args) { // (str) caps, (int) pid or None
 	char *strcaps; int pid = 0;
-	if (!PyArg_ParseTuple(args, "s|i", &strcaps, &pid)) return NULL;
+	if (!PyArg_ParseTuple(args, "et|i",
+		Py_FileSystemDefaultEncoding, &strcaps, &pid)) return NULL;
 	cap_t caps;
 	if ((caps = cap_from_text(strcaps)) == NULL) {
 		PyErr_SetString(PyExc_ValueError, "Invalid capability specification");
-		free(strcaps);
+		PyMem_Free(strcaps);
 		return NULL; }
-	free(strcaps);
+	PyMem_Free(strcaps);
 	int err;
 	if (!pid) err = cap_set_proc(caps);
 	else err = capsetp(pid, caps);
@@ -99,7 +100,7 @@ strcaps_set_process(PyObject *self, PyObject *args) { // (str) caps, (int) pid o
 		PyErr_SetFromErrno(PyExc_OSError);
 		cap_free(caps);
 		return NULL; }
-	cap_free(caps); free(strcaps);
+	cap_free(caps);
 	Py_RETURN_NONE; };
 
 
