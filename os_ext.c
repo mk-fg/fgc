@@ -142,16 +142,16 @@ oe_listdir(PyObject *self, PyObject *args) { // (str) dirname
 	if (dir == NULL) return posix_error_with_allocated_filename(path);
 
 	Gen_DirListing *gen;
-	if (!(gen = PyObject_New(Gen_DirListing, &Gen_DirListingType))) goto fail_1;
+	if (!(gen = PyObject_New(Gen_DirListing, &Gen_DirListingType))) goto fail;
 	if (!PyObject_Init((PyObject *)gen, &Gen_DirListingType)) {
 		Py_DECREF(gen);
-		goto fail_1; }
+		goto fail; }
 
 	gen->dir = dir;
 
 	return (PyObject *)gen;
 
-fail_1:
+fail:
 	Py_BEGIN_ALLOW_THREADS
 	closedir(dir);
 	Py_END_ALLOW_THREADS
