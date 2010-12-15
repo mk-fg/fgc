@@ -8,10 +8,13 @@ from __future__ import unicode_literals, print_function
 import itertools as it, operator as op, functools as ft
 
 import os, sys, stat, re, pwd, grp, types
-from os.path import join, islink, isdir
-from os import rmdir
 from fgc import os_ext
 from warnings import warn
+
+# These are also re-exported
+from os.path import join, islink, isdir
+from os import rmdir
+from fgc.os_ext import listdir
 
 
 
@@ -232,7 +235,7 @@ def walk(top, depth=False, relative=False, onerror=None, follow_links=False):
 		if not isinstance(entries, types.StringTypes): path, entries = entries
 		else:
 			stack.pop()
-			try: path, entries = entries, os_ext.listdir(entries)
+			try: path, entries = entries, listdir(entries)
 			except (OSError, IOError) as err:
 				if depth: yield entries # no recursion here, so just yield
 				if onerror is None: raise
