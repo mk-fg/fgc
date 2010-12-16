@@ -352,11 +352,12 @@ def flock( filespec, contents=None,
 		add_newline=True, block=False, fcntl_args=tuple() ):
 	'''Simple and supposedly-reliable advisory file locking.
 		Uses SIGALRM for timeout, if "block" argument is specified.
-		filespec can be a path (bytes/unicode), fd (int) or file object.'''
+		filespec can be a path (bytes/unicode), fd (int) or file object.
+		Returned file object can be safely discarded if it's built from fd or another object.'''
 
 	try:
-		lock = open(filespec, 'a+') if isinstance(filespec, types.StringTypes)\
-			else (filespec if not isinstance(filespec, int) else os.fopen(filespec))
+		lock = open(filespec, 'a+', closefd=isinstance(filespec, types.StringTypes))\
+			if isinstance(filespec, (int, types.StringTypes)) else filespec
 		if not block: fcntl.lockf(lock, fcntl.LOCK_EX | fcntl.LOCK_NB, *fcntl_args)
 		else:
 			prev_alarm = signal.alarm(block)
