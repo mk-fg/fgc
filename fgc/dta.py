@@ -100,3 +100,9 @@ class ProxyObject(object):
 	def __nonzero__(self): return self.__apply(bool)
 	def __str__(self): return self.__apply(str)
 	def __repr__(self): return self.__apply(repr)
+
+
+def uid(length=8):
+	'Returns pseudo-random string built in a simpliest way possible'
+	length, cut = length // 2, length % 2
+	return open('/dev/urandom', 'rb').read(length + cut).encode('hex')[:-cut or None]
