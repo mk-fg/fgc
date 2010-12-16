@@ -102,6 +102,14 @@ class ProxyObject(object):
 	def __repr__(self): return self.__apply(repr)
 
 
+_property_wrapper = lambda func, self, *argz, **kwz: func(*argz, **kwz)
+def static_property(fget=None, fset=None, fdel=None, **kwz):
+	'Same as property, but does not pass the self argument to functions.'
+	funcs = locals()
+	return property(**dict( (fn, ft.partial(_property_wrapper, funcs[fn]))
+		for fn in ('fget', 'fset', 'fdel') if funcs[fn] is not None ))
+
+
 def uid(length=8):
 	'Returns pseudo-random string built in a simpliest way possible'
 	length, cut = length // 2, length % 2
