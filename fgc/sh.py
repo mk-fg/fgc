@@ -29,10 +29,10 @@ def resolve_ids(uid=-1, gid=-1):
 	return to_uid(uid), to_gid(gid)
 
 def to_uid(user):
-	return int(user) if isinstance(user, int)\
+	return user if isinstance(user, int)\
 		else pwd.getpwnam(user).pw_uid
 def to_gid(group):
-	return int(group) if isinstance(group, int)\
+	return group if isinstance(group, int)\
 		else grp.getgrnam(group).gr_gid
 
 def to_uname(uid):
@@ -343,6 +343,7 @@ def df(path):
 	return (df.f_blocks * df.f_bsize, df.f_bavail * df.f_bsize)
 
 
+from io import open
 from time import time
 import signal, errno, fcntl
 

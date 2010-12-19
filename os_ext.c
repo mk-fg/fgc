@@ -11,8 +11,7 @@ static PyObject *
 posix_error_with_allocated_filename(char* name) {
 	PyObject *rc = PyErr_SetFromErrnoWithFilename(PyExc_OSError, name);
 	PyMem_Free(name);
-	return rc;
-}
+	return rc; }
 
 
 static int
@@ -33,8 +32,7 @@ extract_time(PyObject *ts, long *sec, long *usec) {
 		if (intval == -1 && PyErr_Occurred()) return -1;
 		*sec = intval;
 		*usec = 0; }
-	return 0;
-}
+	return 0; }
 
 
 static PyObject *
@@ -79,8 +77,7 @@ static void Gen_DirListing_dealloc(Gen_DirListing *self) {
 		closedir(self->dir);
 		Py_END_ALLOW_THREADS }
 
-	Py_TYPE(self)->tp_free((PyObject *)self);
-}
+	Py_TYPE(self)->tp_free((PyObject *)self); }
 
 static PyObject *Gen_DirListing_iter(PyObject *self, PyObject *args) {
 	Py_INCREF(self);
@@ -115,11 +112,9 @@ static PyObject *Gen_DirListing_next(PyObject *self, PyObject *args) {
 			PyErr_Clear(); }
 		else Py_DECREF(py_entry_bytes);
 
-		return py_entry_uc;
-	}
+		return py_entry_uc; }
 
-	return NULL;
-}
+	return NULL; }
 
 PyTypeObject Gen_DirListingType = {
 	PyObject_HEAD_INIT(NULL)
