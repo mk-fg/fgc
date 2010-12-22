@@ -12,7 +12,7 @@ from fgc import os_ext
 from warnings import warn
 
 # These are also re-exported
-from os.path import join, islink, isdir
+from os.path import join, islink, isdir, isfile
 from os import rmdir
 from fgc.os_ext import listdir
 
@@ -44,11 +44,15 @@ def to_gname(gid):
 
 
 def chown(path, uid=-1, gid=-1, recursive=False, dereference=True):
+	'''Does not check for recursion-loops (although
+		link-recursion will be avoided with dereference=False)'''
 	uid, gid = resolve_ids(uid, gid)
 	op = os.chown if dereference else os.lchown
-	if recursive:
-		for node in walk(path): op(node, uid, gid)
-	op(path, uid, gid)
+	if not recursive: op(path, uid, gid)
+	else:
+		for path in walk(path, follow_links=dereference):
+			if dereference and islink(path): os.lchown(path, uid, gid) # chown the link as well
+			op(path, uid, gid)
 
 def chmod(path, bits, dereference=True, merge=False):
 	if merge:
@@ -58,7 +62,7 @@ def chmod(path, bits, dereference=True, merge=False):
 	else:
 		try: os.lchmod(path, bits)
 		except AttributeError: # linux does not support symlink modes
-			if dereference or not os.path.islink(path): os.chmod(path, bits)
+			if not os.path.islink(path): os.chmod(path, bits)
 
 
 
@@ -91,9 +95,15 @@ def cp_data(src, dst, append=False, flush=True, sync=False):
 
 def cp_meta(src, dst, attrz=False, dereference=True, skip_ts=None):
 	'Copy mode or full attrz (atime, mtime and ownership) from src to dst'
-	chmod, chown, st, utime_set = (os.chmod, os.chown, os.stat, os.utime)\
-		if dereference else (os.lchmod, os.lchown, os.lstat, os_ext.lutimes)
+	chown, st, utime_set = (os.chown, os.stat, os.utime)\
+		if dereference else (os.lchown, os.lstat, os_ext.lutimes)
 	st = st(src) if isinstance(src, types.StringTypes) else src
+	mode = stat.S_IMODE(st.st_mode)
+	if dereference: os.chmod(dst, mode)
+	else:
+		try: os.lchmod(dst, mode)
+		except AttributeError: # linux does not support symlink modes
+			if not os.path.islink(dst): os.chmod(dst, mode)
 	chmod(dst, stat.S_IMODE(st.st_mode))
 	if (attrz if skip_ts is None else not skip_ts): utime_set(dst, (st.st_atime, st.st_mtime))
 	if attrz: chown(dst, st.st_uid, st.st_gid)
@@ -122,7 +132,7 @@ def cp_d( src, dst, dereference=True, attrz=False,
 			dereference=False, attrz=attrz, skip_ts=skip_ts )
 	elif isdir(src):
 		try:
-			os.makedir(dst)
+			os.mkdir(dst)
 			return cp_meta(src, dst, attrz=attrz, skip_ts=skip_ts)
 		except OSError as err: raise Error(err)
 	else: return cp(src, dst, attrz=attrz, skip_ts=skip_ts)
@@ -148,17 +158,13 @@ def cp_r( src, dst, dereference=True,
 	Atom argument should be a callable, to be called in the same
 	way as cp_d function to transfer each individual file.
 	'''
-	skip = [re.compile(skip)] if isinstance( skip,
-		types.StringTypes ) else list(re.compile(pat) for pat in skip)
-	atom(src, dst, attrz=attrz)
-
 	if onerror is False: errors, onerror = list(), lambda *args: errors.append(args)
 	else: errors = None
 
 	for entity in crawl( src, depth=False,
 			relative=True, onerror=onerror, **crawl_kwz ):
 		try:
-			src_node, dst_node = join(src, entity), join(dst, entity)
+			src_node, dst_node = (join(src, entity), join(dst, entity)) if entity else (src, dst)
 			atom(src_node, dst_node, dereference=dereference, attrz=attrz)
 		except (IOError, OSError, Error) as err:
 			if onerror is None: raise Error(err)
@@ -182,7 +188,7 @@ def rm(path, onerror=None):
 		elif onerror is not False: onerror(path, err)
 
 
-def rr(path, onerror=False, keep_root=False, **crawl_kwz):
+def rr(path, onerror=False, **crawl_kwz):
 	'''
 	Recursively remove path.
 
@@ -193,7 +199,6 @@ def rr(path, onerror=False, keep_root=False, **crawl_kwz):
 
 	for entity in crawl(path, depth=True,
 		onerror=onerror, **crawl_kwz): rm(entity, onerror=onerror)
-	if not keep_root: rm(path, onerror)
 
 
 def mv(src, dst, attrz=True, onerror=None):
@@ -223,13 +228,14 @@ def walk(top, depth=False, relative=False, onerror=None, follow_links=False):
 	'''Filesystem nodes iterator.
 		Unlike os.walk it does not use recursion and never keeps any more
 			nodes in memory than necessary (listdir returns generator, not lists).
-		file/dir nodes' ordering in the same path is undefined.'''
-	if not depth: # special case for root node
-		rec_check = yield top
-		if rec_check is False: raise StopIteration
+		file/dir nodes' ordering in the same path is undefined.
+		bool values can be passed back to iterator if depth=False to determine
+			whether it should descend into returned path (if it is dir, naturally) or not.'''
+	chk = isfile(top)
+	if not depth or chk: # special case for root node
+		if (yield top) is False or chk or (not follow_links and islink(top)): raise StopIteration
 
 	stack = deque([top])
-
 	while stack:
 		entries = stack[-1]
 		if not isinstance(entries, types.StringTypes): path, entries = entries
@@ -261,11 +267,11 @@ def walk(top, depth=False, relative=False, onerror=None, follow_links=False):
 			stack.pop()
 
 
-def crawl(top, include=list(), exclude=list(),
+def crawl(top, include=list(), exclude=list(), filter_func=None,
 		relative=False, recursive_patterns=False, **walk_kwz):
 	'''Filesystem nodes iterator with filtering.
 		With relative=True only the part of path after "top" is returned.
-		"exclude" patterns are applied before "include",
+		"exclude" patterns override "filter_func" which overrides "include",
 			both are matched against "relative" part only.
 		"recursive_patterns" flag enables include/exclude patterns to stop recursion.
 			Ignored when depth=True.'''
@@ -279,8 +285,11 @@ def crawl(top, include=list(), exclude=list(),
 	while True:
 		entry_rel = path_rel(entry)
 		chk = not any(regex.search(entry_rel) for regex in exclude)\
+			and (not filter_func or filter_func(entry, entry_rel))\
 			and (not include or any(regex.search(entry_rel) for regex in include))
-		if chk: yield entry if not relative else entry_rel
+		if chk:
+			chk = yield entry if not relative else entry_rel
+			if chk is None: chk = True
 		try: entry = iterator.send(not recursive_patterns or chk)
 		except StopIteration: break
 
