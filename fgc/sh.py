@@ -105,8 +105,8 @@ def cp_meta(src, dst, attrz=False, dereference=True, skip_ts=None):
 		except AttributeError: # linux does not support symlink modes
 			if not os.path.islink(dst): os.chmod(dst, mode)
 	chmod(dst, stat.S_IMODE(st.st_mode))
-	if (attrz if skip_ts is None else not skip_ts): utime_set(dst, (st.st_atime, st.st_mtime))
 	if attrz: chown(dst, st.st_uid, st.st_gid)
+	if (attrz if skip_ts is None else not skip_ts): utime_set(dst, (st.st_atime, st.st_mtime))
 	return st
 
 
