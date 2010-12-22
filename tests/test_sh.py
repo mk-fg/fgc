@@ -54,7 +54,7 @@ class tp(dict): # TestPath
 
 
 get_mode = lambda path: stat.S_IMODE(os.lstat(path).st_mode)
-get_utime = lambda path, dr=True: op.attrgetter('st_atime', 'st_mtime')((os.stat if dr else os.lstat)(path))
+get_utime = lambda path: op.attrgetter('st_atime', 'st_mtime')(os.lstat(path))
 
 
 def _skipUnlessUids(check_root=True, check_reverse=False):
@@ -145,11 +145,13 @@ class SH_TestFilesBase(unittest.TestCase):
 		for arg in argz: self.assertEqual(chk, open(arg, 'rb').read())
 	def assertModes(self, chk, *argz, **kwz):
 		stat_func = kwz.get('stat_func', lambda path: os.lstat(path).st_mode)
-		for arg in argz: self.assertEqual(chk, stat_func(arg))
+		func = kwz.get('func', self.assertEqual)
+		for arg in argz: func(chk, stat_func(arg))
 
-	def assertIDs(self, path, uid, gid):
-		self.assertEqual(os.lstat(path).st_uid, uid)
-		self.assertEqual(os.lstat(path).st_gid, gid)
+	def assertIDs(self, uid, gid, *paths):
+		for path in paths:
+			self.assertEqual(os.lstat(path).st_uid, uid)
+			self.assertEqual(os.lstat(path).st_gid, gid)
 
 
 
@@ -172,7 +174,6 @@ class SH_TestFilesMacro(SH_TestFilesBase):
 
 	def setUpStats(self):
 		self.lstats = tuple(os.lstat(path).st_mode for path in self.links)
-		self.ltargets = tuple(os.readlink(path) for path in self.links)
 		self.fstats = tuple(os.stat(path).st_mode for path in self.files)
 		self.contents = tuple(open(path, 'rb').read() for path in self.files)
 		self.dstat = os.lstat(self.dir).st_mode
@@ -182,27 +183,30 @@ class SH_TestFilesMacro(SH_TestFilesBase):
 	def assertLinkModes(self):
 		for pair in it.izip(self.lstats, self.links): self.assertModes(*pair)
 	def assertLinkTargets(self):
-		for path,link in it.izip(self.ltargets, self.links): self.assertEqual(path, os.readlink(link))
+		for path,link in it.izip(self.files, self.links): self.assertEqual(path, os.readlink(link))
 
 	def assertFileModes(self):
 		for pair in it.izip(self.fstats, self.files): self.assertModes(*pair)
 	def assertFileContents(self):
-		for pair in it.izip(self.contents, self.files): self.assertModes(*pair)
+		for pair in it.izip(self.contents, self.files): self.assertContents(*pair)
 
 	def assertModesEqual(self, *files, **kwz):
-		stat_func = kwz.get('stat_func', lambda path: os.lstat(path).st_mode)
-		if 'mode' not in kwz: mode, files = stat_func(files[0]), files[1:]
-		else: mode = kwz['mode']
+		if 'stat_func' not in kwz: kwz['stat_func'] = lambda path: os.lstat(path).st_mode
+		if 'mode' not in kwz: mode, files = kwz['stat_func'](files[0]), files[1:]
+		else: mode = kwz.pop('mode')
 		if not files: files = self.files
-		self.assertModes(mode, *files, stat_func=stat_func)
+		self.assertModes(mode, *files, **kwz)
+	def assertModesNotEqual(self, *files, **kwz):
+		if 'func' not in kwz: kwz['func'] = self.assertNotEqual
+		self.assertModesEqual(*files, **kwz)
+	def assertFileModesEqual(self, *files, **kwz):
+		if 'mode' not in kwz: kwz['mode'] = self.fstats[0]
+		self.assertModesEqual(*files, **kwz)
 	def assertContentsEqual(self, *files, **kwz):
 		contents = kwz.get('contents', self.contents[0])
 		if contents is False: contents, files = open(files[0], 'rb').read(), files[1:]
 		if not files: files = self.files
 		self.assertContents(contents, *files)
-	def assertFileModesEqual(self, *files, **kwz):
-		if 'mode' not in kwz: kwz['mode'] = self.fstats[0]
-		self.assertModesEqual(*files, **kwz)
 
 	def assertTimesEqual(self, *paths, **kwz):
 		func, delta = kwz.get('func', self.assertAlmostEqual), kwz.get('delta', 1)
@@ -364,23 +368,23 @@ class SH_TestChown(SH_TestFilesMacro):
 		file_, chk = self.files[0], self.assertIDs
 		os.lchown(file_, 0, 0)
 
-		sh.chown(file_, uid, gid), chk(file_, uid, gid)
-		sh.chown(file_, uid=0, gid=0), chk(file_, 0, 0)
-		sh.chown(file_, uid=uid), chk(file_, uid, 0)
-		sh.chown(file_, 0), chk(file_, 0, 0)
-		sh.chown(file_, gid=gid), chk(file_, 0, gid)
-		sh.chown(file_, uid, -1), chk(file_, uid, gid)
-		sh.chown(file_, -1, 0), chk(file_, uid, 0)
-		sh.chown(file_, -1, -1), chk(file_, uid, 0)
-		sh.chown(file_, None, None), chk(file_, uid, 0)
-		sh.chown(file_, None, gid), chk(file_, uid, gid)
-		sh.chown(file_, 0, None), chk(file_, 0, gid)
-		sh.chown(file_, 0, 0), chk(file_, 0, 0)
-		sh.chown(file_, uname, gname), chk(file_, uid, gid)
+		sh.chown(file_, uid, gid), chk(uid, gid, file_)
+		sh.chown(file_, uid=0, gid=0), chk(0, 0, file_)
+		sh.chown(file_, uid=uid), chk(uid, 0, file_)
+		sh.chown(file_, 0), chk(0, 0, file_)
+		sh.chown(file_, gid=gid), chk(0, gid, file_)
+		sh.chown(file_, uid, -1), chk(uid, gid, file_)
+		sh.chown(file_, -1, 0), chk(uid, 0, file_)
+		sh.chown(file_, -1, -1), chk(uid, 0, file_)
+		sh.chown(file_, None, None), chk(uid, 0, file_)
+		sh.chown(file_, None, gid), chk(uid, gid, file_)
+		sh.chown(file_, 0, None), chk(0, gid, file_)
+		sh.chown(file_, 0, 0), chk(0, 0, file_)
+		sh.chown(file_, uname, gname), chk(uid, gid, file_)
 
 		os.lchown(self.links[0], uid, gid)
 		sh.chown(self.links[0], 0, 0, dereference=False)
-		chk(file_, uid, gid), chk(self.links[0], 0, 0)
+		chk(uid, gid, file_), chk(0, 0, self.links[0])
 
 	@_skipUnlessUids()
 	def test_recursive(self, uname, gname, uid, gid):
@@ -391,22 +395,19 @@ class SH_TestChown(SH_TestFilesMacro):
 		os.chown(dir_, uid, gid), os.chown(file_, uid, gid), os.chown(link_file, uid, gid)
 
 		sh.chown(dir_link, 0, 0, dereference=False)
-		chk(dir_, uid, gid), chk(file_, uid, gid), chk(dir_link, 0, 0)
+		chk(uid, gid, file_, dir_), chk(0, 0, dir_link)
 
 		sh.chown(dir_link, 0, gid, dereference=False, recursive=True)
-		chk(dir_link, 0, gid)
-		chk(dir_, uid, gid), chk(file_, uid, gid), chk(link, uid, gid), chk(link_file, uid, gid)
+		chk(0, gid, dir_link), chk(uid, gid, dir_, file_, link, link_file)
 		sh.chown(dir_, 0, gid, dereference=False, recursive=True)
 
 		# Recursive link should produce endless loop on dereference
 		os.remove(self.tmp_dir_idx['h1']['h12']['link_d2'])
 
 		sh.chown(dir_link, 0, 0, recursive=True)
-		chk(dir_, 0, 0), chk(file_, 0, 0)
-		chk(dir_link, 0, 0), chk(link, 0, 0), chk(link_file, 0, 0)
+		chk(0, 0, dir_, file_, dir_link, link, link_file)
 		sh.chown(dir_link, uid, 0, dereference=True, recursive=True)
-		chk(dir_, uid, 0), chk(file_, uid, 0)
-		chk(dir_link, uid, 0), chk(link, uid, 0), chk(link_file, uid, 0)
+		chk(uid, 0, dir_, file_, dir_link, link, link_file)
 
 
 
@@ -436,10 +437,14 @@ class SH_TestCpData(SH_TestFilesMacro):
 
 
 
-class SH_TestCpMeta(SH_TestFilesMacro):
+# There's just no standard substitute for this
+try: from os_ext import lutimes
+except ImportError: lutimes = False
+
+class SH_TestCpMacro(SH_TestFilesMacro):
 
 	def setUp(self, stats=True):
-		super(SH_TestCpMeta, self).setUp(stats=False)
+		super(SH_TestCpMacro, self).setUp(stats=False)
 		self.dirs = self.dir, unicode(self.tmp_dir_idx['files'])
 		self.dir_links = self.dir_link, self.tmp_dir_idx['h1']['h11']['link_d1']
 
@@ -450,16 +455,18 @@ class SH_TestCpMeta(SH_TestFilesMacro):
 		if stats: self.setUpStats()
 
 		# Times are affected by subsequent stat's, so they have to be set last
-		self.file_times = (time() - 300, time() - 500), (time(), time())
+		ts = time()
+		self.file_times = (ts - 300, ts - 500), (ts, ts)
 		for file_, times in it.izip(self.files, self.file_times): os.utime(file_, times)
 
-		# There's just no standard substitute for this
-		try: from os_ext import lutimes
-		except ImportError: self.dir_times = False
-		else:
-			self.dir_times = (time() - 500, time() - 900), (time() - 600, time() - 1000)
-			for dir_, times in it.izip(self.dirs, self.dir_times): lutimes(dir_, times)
-			self.assertTimesNotEqual(*self.dirs)
+		self.dir_times = (ts - 500, ts - 900), (ts - 600, ts - 1000)
+		for dir_, times in it.izip(self.dirs, self.dir_times): os.utime(dir_, times)
+
+		if lutimes:
+			self.link_times = (ts - 900, ts - 1300), (ts - 1000, ts - 1400)
+			for link, times in it.izip(self.links, self.link_times): lutimes(link, times)
+			self.dl_times = (ts - 700, ts - 1100), (ts - 800, ts - 1200)
+			for link, times in it.izip(self.dir_links, self.dl_times): lutimes(link, times)
 
 
 	def assertFileTimesEqual(self, *paths, **kwz):
@@ -473,111 +480,163 @@ class SH_TestCpMeta(SH_TestFilesMacro):
 		self.assertFileTimesEqual(*paths, **kwz)
 
 
+	def _chown_nodes(self, uid, gid): # for privileged tests
+		os.chown(self.files[0], uid, gid), os.chown(self.files[1], 0, 0)
+		self.assertFileModes()
+		os.lchown(self.links[0], uid, 0), os.lchown(self.links[1], 0, gid)
+		if hasattr(os, 'lchmod'):
+			os.lchmod(self.links[0], 0751), os.lchmod(self.links[1], 0700)
+			self.lstats = tuple(os.lstat(path).st_mode for path in self.links)
+		for file_, times in it.izip(self.files, self.file_times): os.utime(file_, times)
+		if lutimes:
+			for link, times in it.izip(self.links, self.link_times): lutimes(link, times)
+
+
+
+class SH_TestCpMeta(SH_TestCpMacro):
+
 	def test_ts1(self):
 		sh.cp_meta(*self.files)
-		self.assertFileModesEqual()
 		self.assertFileTimesNotEqual()
+		self.assertFileModesEqual()
+		self.assertFileContents()
 
 	def test_ts2(self):
 		sh.cp_meta(*self.files, skip_ts=True)
-		self.assertFileModesEqual()
 		self.assertFileTimesNotEqual()
+		self.assertFileModesEqual()
+		self.assertFileContents()
 
 	def test_ts3(self):
 		sh.cp_meta(*self.files, skip_ts=False)
 		self.assertFileTimesEqual()
 		self.assertFileModesEqual()
+		self.assertFileContents()
 
-	def test_ts_types(self):
+	def test_types(self):
 		sh.cp_meta(self.files[0], self.dir, skip_ts=False)
-		self.assertModesEqual(self.files[0], self.dir, stat_func=get_mode)
 		self.assertFileTimesEqual(self.files[0], self.dir)
+		self.assertModesEqual(self.files[0], self.dir, stat_func=get_mode)
+		self.assertFileContents()
 
-# 		sh.cp_meta(dir1, dir2, skip_ts=False)
-# 		self.assertEqual(mode, get_mode(dir1))
-# 		self.assertEqual(mode, get_mode(dir2))
-# 		cmp_utimes(dir1, dir2)
+	def test_dirs(self):
+		sh.cp_meta(*self.dirs, skip_ts=False)
+		self.assertTimesEqual(*self.dirs, times=self.dir_times[0])
+		self.assertModesEqual(*self.dirs, mode=self.dstat)
 
-# 		os.chmod(file2, 0600), os.utime(file2, (0, 0))
-# 		sh.cp_meta(file1, link2, skip_ts=False)
-# 		if lutimes: cmp_utimes(file1, link2, ne=True, dr=False)
-# 		self.assertNotEqual(mode, get_mode(link2, dr=False))
-# 		self.assertEqual(mode, get_mode(file2))
-# 		self.assertEqual(get_mode(link1), get_mode(link2))
-# 		cmp_utimes(file1, file2)
+	def test_links1(self):
+		sh.cp_meta(self.files[0], self.links[1], skip_ts=False)
+		self.assertFileTimesEqual()
+		if lutimes: self.assertTimesNotEqual(self.files[0], self.links[1])
+		self.assertModesNotEqual(self.files[0], self.links[1], stat_func=get_mode)
+		self.assertFileModesEqual(*self.files)
+		self.assertModesEqual(*self.links, mode=self.lstats[0])
+		self.assertFileContents()
 
-# 		if lutimes: lutimes(link1, lutime1), lutimes(link2, lutime2)
-# 		os.chmod(file2, 0600), os.utime(file2, (0, 0))
-# 		sh.cp_meta(link1, link2, dereference=True, skip_ts=False)
-# 		if lutimes: cmp_utimes(file1, link2, ne=True, dr=False, mtime_only=True)
-# 		self.assertNotEqual(mode, get_mode(link2, dr=False))
-# 		self.assertEqual(mode, get_mode(file2))
-# 		self.assertEqual(get_mode(link1), get_mode(link2))
-# 		cmp_utimes(file1, file2)
+	def test_links2(self):
+		sh.cp_meta(*self.links, dereference=True, skip_ts=False)
+		self.assertFileTimesEqual()
+		if lutimes: self.assertTimesNotEqual(*self.links, atime_check=False)
+		self.assertFileModesEqual(*self.files)
+		self.assertModesEqual(*self.links, mode=self.lstats[0])
+		self.assertFileContents()
 
-# 		os.chmod(file2, 0600), os.utime(file2, (0, 0))
-# 		sh.cp_meta(link1, link2, dereference=False, skip_ts=False)
-# 		if lutimes: cmp_utimes(link1, link2, dr=False)
-# 		self.assertNotEqual(get_mode(file1), get_mode(link2, dr=False))
-# 		self.assertNotEqual(get_mode(file1), get_mode(file2))
-# 		cmp_utimes(file1, file2, ne=True)
-# 		self.assertEqual(get_mode(link1, dr=False), get_mode(link2, dr=False))
+	def test_links3(self):
+		sh.cp_meta(*self.links, dereference=False, skip_ts=False)
+		self.assertTimesNotEqual(*self.files)
+		if lutimes: self.assertTimesEqual(*self.links, times=self.link_times[0])
+		self.assertModesNotEqual(self.files[0], self.links[1], stat_func=get_mode)
+		self.assertModesNotEqual(*self.files)
+		self.assertModesEqual(*self.links)
+		self.assertFileContents()
 
-# 		if hasattr(os, 'lchmod'):
-# 			os.lchmod(link2, 700)
-# 			sh.cp_meta(link1, link2, dereference=False, skip_ts=False)
-# 			self.assertEqual(get_mode(link1, dr=False), get_mode(link2, dr=False))
-# 		else:
-# 			link2_mode = get_mode(link2, dr=False)
-# 			sh.cp_meta(file1, link2, dereference=False, skip_ts=False)
-# 			self.assertEqual(link2_mode, get_mode(link2, dr=False))
+	def test_links4(self):
+		if hasattr(os, 'lchmod'):
+			os.lchmod(self.links[1], 700)
+			sh.cp_meta(*self.links, dereference=False, skip_ts=False)
+			if lutimes: self.assertTimesEqual(*self.links, times=self.link_times[0])
+			self.assertModesEqual(*self.links)
+		else:
+			sh.cp_meta(self.files[0], self.links[1], dereference=False, skip_ts=False)
+			if lutimes: self.assertTimesEqual(self.files[0], self.links[1])
+			self.assertModesEqual(self.links[1], mode=self.lstats[1])
+		self.assertFileContents()
 
-# 		if lutimes:
-# 			lutimes(link1, lutime1), lutimes(link2, lutime2)
-# 			sh.cp_meta(link1, link2, dereference=False)
-# 			cmp_utimes(link1, link2, ne=True, dr=False)
+	@unittest.skipUnless( lutimes,
+		'os_ext.lutimes function is inaccessible - no way to set link timestamps' )
+	def test_links4(self):
+		sh.cp_meta(*self.links, dereference=False)
+		self.assertModesEqual(*self.links)
+		self.assertTimesNotEqual(*self.links)
+		self.assertFileContents()
 
-# 	@_skipUnlessUids()
-# 	def test_cp_meta_attrz(self, uname, gname, uid, gid):
-# 		file1, file2 = self.tmp_dir_idx['file_l0'], self.tmp_dir_idx['files']['file_l1']
+	@_skipUnlessUids()
+	def test_attrz1(self, uname, gname, uid, gid):
+		self._chown_nodes(uid, gid)
+		sh.cp_meta(*self.files, attrz=True)
+		self.assertFileTimesEqual()
+		self.assertFileModesEqual()
+		self.assertIDs(uid, gid, *self.files)
+		self.assertFileContents()
 
-# 		os.chown(file1, uid, gid), os.chown(file2, 0, 0)
-# 		os.chmod(file1, 0751), os.chmod(file2, 0600)
-# 		os.utime(file1, (time() - 300, time() - 500)), os.utime(file2, (time(), time()))
+	@_skipUnlessUids()
+	def test_attrz2(self, uname, gname, uid, gid):
+		self._chown_nodes(uid, gid)
+		sh.cp_meta(*self.links, attrz=True)
+		if lutimes: self.assertTimesNotEqual(*self.links, atime_check=False)
+		if hasattr(os, 'lchmod'): self.assertModesNotEqual(*self.links)
+		self.assertFileTimesEqual()
+		self.assertIDs(uid, gid, *self.files)
+		self.assertFileModesEqual()
+		self.assertFileContents()
 
-# 		cmp_utimes = self._cmp_utimes
+	@_skipUnlessUids()
+	def test_attrz3(self, uname, gname, uid, gid):
+		self._chown_nodes(uid, gid)
+		sh.cp_meta(*self.links, dereference=True, attrz=True)
+		if lutimes: self.assertTimesNotEqual(*self.links, atime_check=False)
+		if hasattr(os, 'lchmod'): self.assertModesNotEqual(*self.links)
+		self.assertFileTimesEqual()
+		self.assertIDs(uid, gid, *self.files)
+		self.assertFileModesEqual()
+		self.assertFileContents()
 
-# 		sh.cp_meta(file1, file2, attrz=True)
-# 		self.assertEqual(get_mode(file1), get_mode(file2))
-# 		cmp_utimes(file1, file2)
-# 		self.assertTrue( os.stat(file1).st_uid\
-# 			== os.stat(file2).st_uid and os.stat(file1).st_uid == uid )
-# 		self.assertTrue( os.stat(file1).st_gid\
-# 			== os.stat(file2).st_gid and os.stat(file1).st_gid == gid )
+	@_skipUnlessUids()
+	def test_attrz_links1(self, uname, gname, uid, gid):
+		self._chown_nodes(uid, gid)
+		sh.cp_meta(*self.links, dereference=False, attrz=True)
+		if lutimes: self.assertTimesEqual(*self.links)
+		self.assertModesEqual(*self.links)
+		self.assertFileTimesNotEqual()
+		self.assertIDs(uid, gid, self.files[0])
+		self.assertIDs(0, 0, self.files[1])
+		self.assertFileModes()
+		self.assertFileContents()
 
-# 		link1, link2 = self.tmp_dir_idx['h1']['h12']['link_l0'], self.tmp_dir_idx['h1']['link_l1']
-# 		os.lchown(link1, uid, 0), os.lchown(link2, 0, gid)
-# 		if hasattr(os, 'lchmod'): os.lchmod(link1, 0751), os.lchmod(link2, 0700)
+	@_skipUnlessUids()
+	def test_attrz_links2(self, uname, gname, uid, gid):
+		self._chown_nodes(uid, gid)
+		dir_file = self.tmp_dir_idx['h1']['file']
+		os.chown(dir_file, 0, gid)
+		sh.cp_meta(self.links[0], self.dir, dereference=False, attrz=True)
+		if lutimes: self.assertTimesEqual(self.links[0], self.dir)
+		self.assertModesEqual(self.links[0], self.dir, stat_func=get_mode)
+		self.assertTimesNotEqual(self.files[0], self.dir)
+		self.assertIDs(uid, 0, self.links[0], self.dir)
+		self.assertIDs(0, gid, dir_file)
+		self.assertFileModes()
 
-# 		# There's just no standard substitute for this
-# 		try: from os_ext import lutimes
-# 		except ImportError: lutimes = False
-# 		else:
-
-# 		sh.cp_meta(link1, link2, dereference=False)
-# 		self.assertEqual(get_mode(link1, dr=False), get_mode(link2, dr=False))
-# 		cmp_utimes(file1, file2)
-# 		self.assertTrue( os.stat(file1).st_uid\
-# 			== os.stat(file2).st_uid and os.stat(file1).st_uid == uid )
-# 		self.assertTrue( os.stat(file1).st_gid\
-# 			== os.stat(file2).st_gid and os.stat(file1).st_gid == gid )
+	@_skipUnlessUids()
+	def test_attrz_links3(self, uname, gname, uid, gid):
+		self._chown_nodes(uid, gid)
+		sh.cp_meta(self.files[0], self.links[1], dereference=False, attrz=True)
+		if lutimes: self.assertTimesEqual(self.files[0], self.links[1])
+		if hasattr(os, 'lchmod'): self.assertModesEqual(self.files[0], self.links[1], stat_func=get_mode)
+		else: self.assertModes(self.lstats[1], self.links[1])
+		self.assertTimesNotEqual(self.links[1], self.files[1], atime_check=False)
+		self.assertIDs(uid, gid, self.files[0], self.links[1])
+		self.assertFileModes()
 
 
 
-
-
-
-
-
-
-
+# class SH_TestCp(SH_TestCpMacro):
