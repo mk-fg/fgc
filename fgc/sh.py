@@ -118,11 +118,11 @@ def cp(src, dst, attrz=False, dereference=True, sync=False, skip_ts=None):
 			op.attrgetter('S_ISREG', 'S_ISDIR', 'S_ISLNK')(stat) ):
 		raise Error('Node is not a file/dir/link, cp of these is not supported.')
 	cp_data(src, dst, sync=sync)
-	cp_meta(src_stat, dst, attrz=attrz, skip_ts=skip_ts)
+	return cp_meta(src_stat, dst, attrz=attrz, skip_ts=skip_ts)
 
 cp_p = lambda src,dst: cp(src, dst, attrz=True)
 
-def cp_d(src, dst, dereference=True, attrz=False, sync=False, skip_ts=None):
+def cp_d(src, dst, attrz=False, dereference=True, sync=False, skip_ts=None):
 	'Copy only one node, whatever it is.'
 	if not dereference and islink(src):
 		os.symlink(os.readlink(src), dst)
@@ -133,13 +133,13 @@ def cp_d(src, dst, dereference=True, attrz=False, sync=False, skip_ts=None):
 			os.mkdir(dst)
 			return cp_meta(src, dst, attrz=attrz, skip_ts=skip_ts)
 		except OSError as err: raise Error(err)
-	else: return cp(src, dst, attrz=attrz, skip_ts=skip_ts)
+	else: return cp(src, dst, attrz=attrz, sync=sync, skip_ts=skip_ts)
 
 
 def cp_r( src, dst, dereference=True,
 		attrz=False, onerror=False, atom=cp_d, **crawl_kwz ):
 	'''
-	Recursively copy a directory tree, preserving mode/stats.
+	Recursively copy a directory tree.
 
 	The destination directory must not already exist.
 	If exception(s) occur, an Error is raised with a list of reasons.
