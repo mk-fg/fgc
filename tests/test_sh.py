@@ -57,7 +57,19 @@ get_mode = lambda path: stat.S_IMODE(os.lstat(path).st_mode)
 get_utime = lambda path: op.attrgetter('st_atime', 'st_mtime')(os.lstat(path))
 
 
-def _skipUnlessUids(check_root=True, check_reverse=False):
+def getnxname():
+		import pwd, grp
+		while True:
+			nxname = 'nxuser{}'.format(SH_TestFilesBase._uid())
+			try: pwd.getpwnam(nxname)
+			except KeyError: pass
+			else: continue
+			try: grp.getgrnam(nxname)
+			except KeyError: pass
+			else: continue
+			return nxname
+
+def skipUnlessUids(check_root=True, check_reverse=False):
 	if check_root and os.geteuid() != 0:
 		return unittest.skip('Superuser access required')
 
@@ -131,12 +143,13 @@ class SH_TestFilesBase(unittest.TestCase):
 		os.link(unicode(idx['h1']['h12']['file_lh']), idx['h1']['h11'].node('link_lh'))
 
 	def tearDown(self):
+		if os.getuid() == 0: os.seteuid(0), os.setegid(0)
 		for root, dirs, files in os.walk( self.tmp_dir_gc,
 				topdown=False, followlinks=False, onerror=lambda x: None ):
 			for name in files+dirs:
 				name = os.path.join(root, name)
-				if os.path.isfile(name) or os.path.islink(name): os.remove(name)
-				else: os.rmdir(name)
+				if os.path.isdir(name) and not os.path.islink(name): os.rmdir(name)
+				else: os.remove(name)
 		os.rmdir(self.tmp_dir_gc)
 
 	def assertAllEqual(self, chk, *argz):
@@ -165,6 +178,7 @@ class SH_TestFilesMacro(SH_TestFilesBase):
 		self.hl = self.tmp_dir_idx['h1']['h12']['file_lh'], self.tmp_dir_idx['h1']['h11']['link_lh']
 		self.dir = unicode(self.tmp_dir_idx['h1'])
 		self.dir_link = self.tmp_dir_idx['link_d0']
+		self.nxfile = self.tmp_dir_idx.node('nxfile')
 
 		os.chmod(self.files[0], 0751)
 		os.chmod(self.files[1], 0640)
@@ -224,6 +238,9 @@ class SH_TestFilesMacro(SH_TestFilesBase):
 
 class SH_TestCat(SH_TestFilesMacro):
 
+	def test_exc(self):
+		with self.assertRaises(Exception): sh.cat(*self.files)
+
 	def test_simple(self):
 		sh.cat(open(self.files[0], 'rb'), open(self.files[1], 'wb'))
 		self.assertContentsEqual()
@@ -260,7 +277,12 @@ class SH_TestCat(SH_TestFilesMacro):
 
 class SH_TestIDs(SH_TestFilesBase):
 
-	@_skipUnlessUids(check_root=False)
+	def test_exc(self):
+		nxname = getnxname()
+		with self.assertRaises(KeyError): sh.to_uid(nxname)
+		with self.assertRaises(KeyError): sh.to_gid(nxname)
+
+	@skipUnlessUids(check_root=False)
 	def test_straight(self, uname, gname, uid, gid):
 		self.assertEqual(sh.to_uid(uid), uid)
 		self.assertEqual(sh.to_uid(uname), uid)
@@ -274,7 +296,7 @@ class SH_TestIDs(SH_TestFilesBase):
 		self.assertEqual(tuple(sh.resolve_ids(-1, -1)), (-1, -1))
 		self.assertEqual(tuple(sh.resolve_ids('{}:{}'.format(uname, gname))), (uid, gid))
 
-	@_skipUnlessUids(check_root=False, check_reverse=True)
+	@skipUnlessUids(check_root=False, check_reverse=True)
 	def test_reverse(self, uname, gname, uid, gid, nxuid, nxgid):
 		self.assertEqual(sh.to_uname(uid), uname)
 		self.assertEqual(sh.to_uname(nxuid), nxuid)
@@ -284,6 +306,14 @@ class SH_TestIDs(SH_TestFilesBase):
 
 
 class SH_TestChmod(SH_TestFilesMacro):
+
+	def test_exc(self):
+		with self.assertRaises(OSError): sh.chmod(self.nxfile, 0750)
+
+	@skipUnlessUids()
+	def test_exc_super(self, uname, gname, uid, gid):
+		os.setegid(gid), os.seteuid(uid)
+		with self.assertRaises(OSError): sh.chmod(self.files[0], 04700)
 
 	def test_basic(self):
 		sh.chmod(self.files[0], 0644)
@@ -363,7 +393,16 @@ class SH_TestChmod(SH_TestFilesMacro):
 
 class SH_TestChown(SH_TestFilesMacro):
 
-	@_skipUnlessUids()
+	@skipUnlessUids()
+	def test_exc(self, uname, gname, uid, gid):
+		nxname = getnxname()
+		with self.assertRaises(OSError): sh.chown(self.nxfile, uid, gid)
+		with self.assertRaises(KeyError): sh.chown(self.files[0], nxname, None)
+		with self.assertRaises(KeyError): sh.chown(self.files[0], None, nxname)
+		os.setegid(gid), os.seteuid(uid)
+		with self.assertRaises(OSError): sh.chown(self.files[0], 0, gid)
+
+	@skipUnlessUids()
 	def test_simple(self, uname, gname, uid, gid):
 		file_, chk = self.files[0], self.assertIDs
 		os.lchown(file_, 0, 0)
@@ -386,7 +425,7 @@ class SH_TestChown(SH_TestFilesMacro):
 		sh.chown(self.links[0], 0, 0, dereference=False)
 		chk(uid, gid, file_), chk(0, 0, self.links[0])
 
-	@_skipUnlessUids()
+	@skipUnlessUids()
 	def test_recursive(self, uname, gname, uid, gid):
 		dir_, dir_link, chk = self.dir, self.dir_link, self.assertIDs
 		file_, link, link_file = self.tmp_dir_idx['h1']['file'],\
@@ -412,6 +451,16 @@ class SH_TestChown(SH_TestFilesMacro):
 
 
 class SH_TestCpData(SH_TestFilesMacro):
+
+	def test_exc(self):
+		with self.assertRaises((IOError, OSError)):
+			sh.cp_data(self.nxfile, self.files[1])
+
+	def test_samefile(self):
+		with self.assertRaises(sh.Error): sh.cp_data(self.files[0], self.links[0])
+		with self.assertRaises(sh.Error): sh.cp_data(*self.hl)
+		self.assertFileModes()
+		self.assertFileContents()
 
 	def test_simple(self):
 		sh.cp_data(*self.files)
@@ -447,6 +496,10 @@ class SH_TestCpMacro(SH_TestFilesMacro):
 		super(SH_TestCpMacro, self).setUp(stats=False)
 		self.dirs = self.dir, unicode(self.tmp_dir_idx['files'])
 		self.dir_links = self.dir_link, self.tmp_dir_idx['h1']['h11']['link_d1']
+
+		self.dst = self.tmp_dir_idx.node('dst')
+		self.dst_dir = unicode(self.tmp_dir_idx['files'])
+		self.dst_dir_node = os.path.join(self.dst_dir, os.path.basename(self.files[0]))
 
 		if hasattr(os, 'lchmod'):
 			for link in self.links: os.lchmod(link, 777)
@@ -501,15 +554,27 @@ class SH_TestCpMeta(SH_TestCpMacro):
 		self.assertFileModesEqual()
 		self.assertFileContents()
 
-	def test_ts2(self):
-		sh.cp_meta(*self.files, skip_ts=True)
-		self.assertFileTimesNotEqual()
-		self.assertFileModesEqual()
-		self.assertFileContents()
+	# def test_ts2(self):
+	# 	sh.cp_meta(*self.files, skip_ts=True)
+	# 	self.assertFileTimesNotEqual()
+	# 	self.assertFileModesEqual()
+	# 	self.assertFileContents()
 
 	def test_ts3(self):
 		sh.cp_meta(*self.files, skip_ts=False)
 		self.assertFileTimesEqual()
+		self.assertFileModesEqual()
+		self.assertFileContents()
+
+	def test_exc(self):
+		with self.assertRaises((IOError, OSError)):
+			sh.cp_meta(self.nxfile, self.files[1])
+		with self.assertRaises((IOError, OSError)):
+			sh.cp_meta(self.files[0], self.nxfile)
+
+	def test_stat(self):
+		sh.cp_meta(os.stat(self.files[0]), self.files[1])
+		self.assertFileTimesNotEqual()
 		self.assertFileModesEqual()
 		self.assertFileContents()
 
@@ -523,6 +588,12 @@ class SH_TestCpMeta(SH_TestCpMacro):
 		sh.cp_meta(*self.dirs, skip_ts=False)
 		self.assertTimesEqual(*self.dirs, times=self.dir_times[0])
 		self.assertModesEqual(*self.dirs, mode=self.dstat)
+
+	def test_return(self):
+		chk, ret = os.stat(self.files[0]), sh.cp_meta(*self.files)
+		self.assertEqual(type(chk), type(ret))
+		self.assertEqual(chk.st_dev, ret.st_dev)
+		self.assertEqual(chk.st_ino, ret.st_ino)
 
 	def test_links1(self):
 		sh.cp_meta(self.files[0], self.links[1], skip_ts=False)
@@ -570,7 +641,13 @@ class SH_TestCpMeta(SH_TestCpMacro):
 		self.assertTimesNotEqual(*self.links)
 		self.assertFileContents()
 
-	@_skipUnlessUids()
+	@skipUnlessUids()
+	def test_exc_super(self, uname, gname, uid, gid):
+		self._chown_nodes(uid, gid)
+		os.setegid(gid), os.seteuid(uid)
+		with self.assertRaises((IOError, OSError)): sh.cp_meta(*self.files)
+
+	@skipUnlessUids()
 	def test_attrz1(self, uname, gname, uid, gid):
 		self._chown_nodes(uid, gid)
 		sh.cp_meta(*self.files, attrz=True)
@@ -579,7 +656,7 @@ class SH_TestCpMeta(SH_TestCpMacro):
 		self.assertIDs(uid, gid, *self.files)
 		self.assertFileContents()
 
-	@_skipUnlessUids()
+	@skipUnlessUids()
 	def test_attrz2(self, uname, gname, uid, gid):
 		self._chown_nodes(uid, gid)
 		sh.cp_meta(*self.links, attrz=True)
@@ -590,7 +667,7 @@ class SH_TestCpMeta(SH_TestCpMacro):
 		self.assertFileModesEqual()
 		self.assertFileContents()
 
-	@_skipUnlessUids()
+	@skipUnlessUids()
 	def test_attrz3(self, uname, gname, uid, gid):
 		self._chown_nodes(uid, gid)
 		sh.cp_meta(*self.links, dereference=True, attrz=True)
@@ -601,7 +678,16 @@ class SH_TestCpMeta(SH_TestCpMacro):
 		self.assertFileModesEqual()
 		self.assertFileContents()
 
-	@_skipUnlessUids()
+	@skipUnlessUids()
+	def test_attrz_stat(self, uname, gname, uid, gid):
+		self._chown_nodes(uid, gid)
+		sh.cp_meta(os.stat(self.files[0]), self.files[1], attrz=True)
+		self.assertFileTimesEqual()
+		self.assertFileModesEqual()
+		self.assertIDs(uid, gid, *self.files)
+		self.assertFileContents()
+
+	@skipUnlessUids()
 	def test_attrz_links1(self, uname, gname, uid, gid):
 		self._chown_nodes(uid, gid)
 		sh.cp_meta(*self.links, dereference=False, attrz=True)
@@ -613,7 +699,7 @@ class SH_TestCpMeta(SH_TestCpMacro):
 		self.assertFileModes()
 		self.assertFileContents()
 
-	@_skipUnlessUids()
+	@skipUnlessUids()
 	def test_attrz_links2(self, uname, gname, uid, gid):
 		self._chown_nodes(uid, gid)
 		dir_file = self.tmp_dir_idx['h1']['file']
@@ -626,7 +712,7 @@ class SH_TestCpMeta(SH_TestCpMacro):
 		self.assertIDs(0, gid, dir_file)
 		self.assertFileModes()
 
-	@_skipUnlessUids()
+	@skipUnlessUids()
 	def test_attrz_links3(self, uname, gname, uid, gid):
 		self._chown_nodes(uid, gid)
 		sh.cp_meta(self.files[0], self.links[1], dereference=False, attrz=True)
@@ -639,4 +725,52 @@ class SH_TestCpMeta(SH_TestCpMacro):
 
 
 
-# class SH_TestCp(SH_TestCpMacro):
+class SH_TestCp(SH_TestCpMacro):
+
+	def test_simple(self):
+		sh.cp(self.files[0], self.dst)
+		self.assertTimesNotEqual(self.files[0], self.dst, atime_check=False)
+		self.assertModesEqual(self.files[0], self.dst)
+		self.assertContentsEqual(self.files[0], self.dst)
+
+	def test_dir(self):
+		with self.assertRaises((IOError, OSError)): sh.cp(self.dirs[0], self.dst)
+
+	def test_into(self):
+		sh.cp(self.files[0], self.dst_dir)
+		self.assertTimesNotEqual(self.files[0], self.dst_dir_node, atime_check=False)
+		self.assertFileModesEqual(self.files[0], self.dst_dir_node)
+		self.assertContentsEqual(self.files[0], self.dst_dir_node)
+
+	def test_exc(self):
+		with self.assertRaises((IOError, OSError)):
+			sh.cp(self.nxfile, self.files[1])
+		os.mkfifo(self.nxfile)
+		with self.assertRaises(sh.Error):
+			sh.cp(self.nxfile, self.files[1])
+
+	def test_ts1(self):
+		self.files = self.files[0], self.dst
+		sh.cp(*self.files)
+		self.assertFileTimesNotEqual()
+		self.assertFileModesEqual()
+		self.assertContentsEqual()
+
+	def test_ts2(self):
+		self.files = self.files[0], self.dst
+		sh.cp(*self.files, skip_ts=False)
+		self.assertFileTimesEqual(atime_check=False)
+		self.assertFileModesEqual()
+		self.assertContentsEqual()
+
+	@skipUnlessUids()
+	def test_attrz(self, uname, gname, uid, gid):
+		self._chown_nodes(uid, gid)
+		self.files = self.files[0], self.dst
+		sh.cp(*self.files, attrz=True)
+		self.assertFileTimesEqual(atime_check=False)
+		self.assertFileModesEqual()
+		self.assertIDs(uid, gid, *self.files)
+		self.assertContentsEqual()
+
+

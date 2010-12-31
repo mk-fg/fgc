@@ -168,7 +168,8 @@ def add_globals(self):
 		'list':lambda *x:list(x), 'list?': lambda x:isa(x,list),
 		'null?':lambda x:x==[], 'symbol?':lambda x: isa(x, Symbol),
 		'boolean?':lambda x: isa(x, bool), 'pair?':is_pair,
-		'apply':lambda proc,l: proc(*l), 'eval':lambda x: eval(expand(x)), 'call/cc':callcc })
+		'apply':lambda proc,l: proc(*l), 'eval':lambda x: eval(expand(x)),
+		'call/cc':callcc })
 	return self
 
 

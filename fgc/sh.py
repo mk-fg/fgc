@@ -83,14 +83,13 @@ def _cmp(src, dst):
 			== os.path.normcase(os.path.abspath(dst)) )
 
 
-def cp_data(src, dst, append=False, flush=True, sync=False):
+def cp_data(src, dst, append=False, sync=False):
 	'Copy data from src to dst'
 	if _cmp(src, dst):
 		raise Error('{0!r} and {1!r} are the same file'.format(src, dst))
 	with open(src, 'rb') as fsrc,\
 			open(dst, 'wb' if not append else 'ab') as fdst:
-		try: cat(fsrc, fdst, flush=flush, sync=sync)
-		except IOError as err: raise Error(err)
+		cat(fsrc, fdst, sync=sync)
 
 
 def cp_meta(src, dst, attrz=False, dereference=True, skip_ts=None):
@@ -111,24 +110,22 @@ def cp_meta(src, dst, attrz=False, dereference=True, skip_ts=None):
 	return st
 
 
-def cp(src, dst, attrz=False, dereference=True, flush=False, sync=False, skip_ts=None):
+def cp(src, dst, attrz=False, dereference=True, sync=False, skip_ts=None):
 	'Copy data and mode bits ("cp src dst"). The destination may be a dir.'
 	if isdir(dst): dst = join(dst, os.path.basename(src))
 	src_stat = (os.stat if dereference else os.lstat)(src)
 	if not any( f(src_stat.st_mode) for f in
 			op.attrgetter('S_ISREG', 'S_ISDIR', 'S_ISLNK')(stat) ):
 		raise Error('Node is not a file/dir/link, cp of these is not supported.')
-	cp_data(src, dst, flush=flush, sync=sync)
-	return cp_meta(src_stat, dst, attrz=attrz, skip_ts=skip_ts)
+	cp_data(src, dst, sync=sync)
+	cp_meta(src_stat, dst, attrz=attrz, skip_ts=skip_ts)
 
 cp_p = lambda src,dst: cp(src, dst, attrz=True)
 
-def cp_d( src, dst, dereference=True, attrz=False,
-		flush=False, sync=False, skip_ts=None ):
+def cp_d(src, dst, dereference=True, attrz=False, sync=False, skip_ts=None):
 	'Copy only one node, whatever it is.'
 	if not dereference and islink(src):
-		src_node = os.readlink(src)
-		os.symlink(src_node, dst)
+		os.symlink(os.readlink(src), dst)
 		return cp_meta( src, dst,
 			dereference=False, attrz=attrz, skip_ts=skip_ts )
 	elif isdir(src):
