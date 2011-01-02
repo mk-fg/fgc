@@ -107,7 +107,7 @@ class SH_TestFilesBase(unittest.TestCase):
 	_uid = it.chain.from_iterable(it.imap(xrange, it.repeat(2**30))).next
 	uid = dta.static_property(_uid)
 
-	# Note: I don't give a fuck about filenames with non-ascii chars
+	# Note: I don't really care about filenames with non-ascii chars
 	file_name = dta.static_property(it.imap(
 		lambda s: shuffle(s) or unicode(s),
 		it.repeat(bytearray(dta.uid(20) + b' '*3 + b'."_-!\'')) ).next)
@@ -153,7 +153,8 @@ class SH_TestFilesBase(unittest.TestCase):
 				name = os.path.join(root, name)
 				if os.path.isdir(name) and not os.path.islink(name): os.rmdir(name)
 				else: os.remove(name)
-		os.rmdir(self.tmp_dir_gc)
+		try: os.rmdir(self.tmp_dir_gc)
+		except OSError: pass
 
 	def assertAllEqual(self, chk, *argz):
 		for arg in argz: self.assertEqual(chk, arg)
@@ -860,8 +861,11 @@ class SH_TestCpVariants(SH_TestCpMacro):
 
 class SH_TestWalk(SH_TestFilesBase):
 
+	# Same suite will be repeated for sh.crawl
+	func = staticmethod(sh.walk)
+
 	def test_interface(self):
-		paths = sh.walk(unicode(self.tmp_dir_idx))
+		paths = self.func(unicode(self.tmp_dir_idx))
 		self.assertTrue(isinstance(paths, types.GeneratorType))
 		self.assertTrue(next(paths))
 		self.assertTrue(paths.send(True))
@@ -871,32 +875,111 @@ class SH_TestWalk(SH_TestFilesBase):
 	def test_topdown(self):
 		paths1 = set(it.imap(unicode, self.tmp_dir_idx.viewvalues()))
 		paths1.add(unicode(self.tmp_dir_idx))
-		paths2 = list(sh.walk(unicode(self.tmp_dir_idx)))
+		paths2 = list(self.func(unicode(self.tmp_dir_idx)))
 		# Assertion that top-level paths are first in the walk
 		self.assertEqual(set(paths2[:len(paths1)]), paths1)
 
 	def test_topdown_first(self):
 		root = unicode(self.tmp_dir_idx)
-		paths = sh.walk(root)
+		paths = self.func(root)
 		self.assertEqual(next(paths), root)
 
 	def test_depth(self):
 		root = unicode(self.tmp_dir_idx)
-		paths = sh.walk(root, depth=True)
+		paths = self.func(root, depth=True)
 		self.assertGreater(len(next(paths).split(os.sep)), len(root.split(os.sep)))
 
 	def test_count(self):
-		self.assertEqual(len(list(sh.walk(unicode(self.tmp_dir_idx)))), self.node_count)
+		self.assertEqual(len(list(self.func(unicode(self.tmp_dir_idx)))), self.node_count)
 
 	def test_follow_links(self):
-		paths = sh.walk(unicode(self.tmp_dir_idx), follow_links=True)
+		paths = self.func(unicode(self.tmp_dir_idx), follow_links=True)
 		for idx in xrange(self.node_count * 10): self.assertTrue(next(paths))
 
 	def test_control(self):
-		walk = sh.walk(unicode(self.tmp_dir_idx), follow_links=True)
+		walk = self.func(unicode(self.tmp_dir_idx), follow_links=True)
 		next(walk)
 		for idx in xrange(self.node_count * 10):
 			try: walk.send(False)
 			except StopIteration: break
-		else: raise ValueError('Generator got stuck in an endless loop')
+		else: raise AssertionError('Generator got stuck in an endless loop')
+
+	def test_file(self):
+		self.assertEqual(len(list(self.func(self.tmp_dir_idx['file']))), 1)
+
+	def test_exc(self):
+		with self.assertRaises((IOError, OSError)):
+			list(self.func(self.tmp_dir_idx.node('nxfile')))
+
+	@skipUnlessUids()
+	def test_onerror(self, uname, gname, uid, gid):
+		# No idea how to produce err here, aside from permissions
+		errs = list()
+		def err_trap(obj, err):
+			self.assertTrue(isinstance(err, Exception))
+			errs.append(err)
+		os.chown(unicode(self.tmp_dir_idx['h1']['h11']), 0, 0)
+		os.chmod(unicode(self.tmp_dir_idx['h1']['h11']), 700)
+		os.setegid(gid), os.seteuid(uid)
+		walk = self.func(
+			unicode(self.tmp_dir_idx['h1']),
+			depth=False, onerror=err_trap )
+		self.assertTrue(list(walk))
+		self.assertTrue(errs)
+
+
+
+class SH_TestCrawl(SH_TestWalk):
+
+	func = staticmethod(sh.crawl)
+
+	def setUp(self, stats=True):
+		super(SH_TestCrawl, self).setUp()
+		self.root = unicode(self.tmp_dir_idx)
+		self.pats = tuple(
+			r'^{}'.format(re.escape(unicode(path)[len(self.root)+1:]))
+			for path in ( self.tmp_dir_idx['files'],
+				self.tmp_dir_idx['files']['file'], self.tmp_dir_idx['empty'] ) )
+
+	def test_rel(self):
+		for path in self.func(self.root, relative=True):
+			self.assertTrue(not path.startswith(self.root))
+
+	def test_filters1(self):
+		paths0 = list(self.func(self.root))
+		paths1 = list(self.func(self.root, include=self.pats))
+		paths2 = list(self.func(self.root, exclude=self.pats))
+		self.assertGreater(len(paths1), 0)
+		self.assertEqual(len(paths1), len(paths0) - len(paths2))
+
+	def test_filters2(self):
+		paths0 = list(self.func(self.root, include=self.pats[0]))
+		paths1 = list(self.func(self.root, include=self.pats[0], exclude=self.pats[1]))
+		self.assertGreater(len(paths1), 0)
+		self.assertGreater(len(paths0), len(paths1))
+
+	def test_filters3(self):
+		self.assertEqual(len(list(self.func(
+			self.root, exclude=self.pats[0], include=self.pats[1] ))), 0)
+
+	def test_filters4(self):
+		pat1 = re.escape('{}$'.format(os.path.basename(
+			unicode(self.tmp_dir_idx['files'])[len(self.root)+1:] )))
+		pat2 = re.escape(os.path.basename(
+			unicode(self.tmp_dir_idx['files']['file'])[len(self.root)+1:] ))
+		paths = list(self.func(self.root, exclude=pat1, include=pat2))
+		self.assertGreater(len(paths), 0)
+		paths = list(self.func(self.root, exclude=pat1, include=pat2, recursive_patterns=True))
+		self.assertEqual(len(paths), 0)
+
+	def test_filters5(self):
+		def filter_func(path, path_rel, counter=list()):
+			self.assertTrue(path.endswith(path_rel))
+			counter.append(path)
+			return len(counter) <= 5
+		paths = list(self.func(self.root, filter_func=filter_func))
+		self.assertEqual(len(paths), 5)
+
+
+
 

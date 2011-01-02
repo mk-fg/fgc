@@ -286,9 +286,10 @@ def crawl(top, include=list(), exclude=list(), filter_func=None,
 			and (not filter_func or filter_func(entry, entry_rel))\
 			and (not include or any(regex.search(entry_rel) for regex in include))
 		if chk:
-			chk = yield entry if not relative else entry_rel
+			chk = yield (entry if not relative else entry_rel)
 			if chk is None: chk = True
-		try: entry = iterator.send(not recursive_patterns or chk)
+		elif not recursive_patterns: chk = True # so "recursive_patterns" won't affect .send()
+		try: entry = iterator.send(chk)
 		except StopIteration: break
 
 
