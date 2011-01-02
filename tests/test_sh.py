@@ -864,6 +864,7 @@ class SH_TestWalk(SH_TestFilesBase):
 		paths = sh.walk(unicode(self.tmp_dir_idx))
 		self.assertTrue(isinstance(paths, types.GeneratorType))
 		self.assertTrue(next(paths))
+		self.assertTrue(paths.send(True))
 		with self.assertRaises(StopIteration):
 			while True: next(paths)
 
@@ -890,3 +891,12 @@ class SH_TestWalk(SH_TestFilesBase):
 	def test_follow_links(self):
 		paths = sh.walk(unicode(self.tmp_dir_idx), follow_links=True)
 		for idx in xrange(self.node_count * 10): self.assertTrue(next(paths))
+
+	def test_control(self):
+		walk = sh.walk(unicode(self.tmp_dir_idx), follow_links=True)
+		next(walk)
+		for idx in xrange(self.node_count * 10):
+			try: walk.send(False)
+			except StopIteration: break
+		else: raise ValueError('Generator got stuck in an endless loop')
+
