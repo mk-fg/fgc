@@ -131,6 +131,7 @@ class SH_TestFilesBase(unittest.TestCase):
 					tp(*(['file']*3 + ['file_l2']), name='h11'),
 					tp(*(['file']*3 + ['file_lh']), name='h12') ]), name='h1'),
 			name='root', path=tmp_dir, suite=self ).create()
+
 		# File symlinks
 		os.symlink(unicode(idx['file_l0']), idx['h1']['h12'].node('link_l0'))
 		os.symlink(unicode(idx['files']['file_l1']), idx['h1'].node('link_l1'))
@@ -141,6 +142,8 @@ class SH_TestFilesBase(unittest.TestCase):
 		os.symlink(unicode(idx), idx['h1']['h12'].node('link_d2'))
 		# Hardlink
 		os.link(unicode(idx['h1']['h12']['file_lh']), idx['h1']['h11'].node('link_lh'))
+
+		self.node_count = 30
 
 	def tearDown(self):
 		if os.getuid() == 0: os.seteuid(0), os.setegid(0)
@@ -554,11 +557,11 @@ class SH_TestCpMeta(SH_TestCpMacro):
 		self.assertFileModesEqual()
 		self.assertFileContents()
 
-	# def test_ts2(self):
-	# 	sh.cp_meta(*self.files, skip_ts=True)
-	# 	self.assertFileTimesNotEqual()
-	# 	self.assertFileModesEqual()
-	# 	self.assertFileContents()
+	def test_ts2(self):
+		sh.cp_meta(*self.files, skip_ts=True)
+		self.assertFileTimesNotEqual()
+		self.assertFileModesEqual()
+		self.assertFileContents()
 
 	def test_ts3(self):
 		sh.cp_meta(*self.files, skip_ts=False)
@@ -842,3 +845,48 @@ class SH_TestCpVariants(SH_TestCpMacro):
 		self.assertIDs(uid, 0, self.links[0], self.dst)
 		self.assertTrue(os.path.samefile(self.links[0], self.dst))
 
+	def test_exc(self):
+		with self.assertRaises((IOError, OSError)):
+			sh.cp_d(self.nxfile, self.files[1])
+		with self.assertRaises((IOError, OSError)):
+			sh.cp_p(self.nxfile, self.files[1])
+		os.mkfifo(self.nxfile)
+		with self.assertRaises(sh.Error):
+			sh.cp_d(self.nxfile, self.files[1])
+		with self.assertRaises(sh.Error):
+			sh.cp_p(self.nxfile, self.files[1])
+
+
+
+class SH_TestWalk(SH_TestFilesBase):
+
+	def test_interface(self):
+		paths = sh.walk(unicode(self.tmp_dir_idx))
+		self.assertTrue(isinstance(paths, types.GeneratorType))
+		self.assertTrue(next(paths))
+		with self.assertRaises(StopIteration):
+			while True: next(paths)
+
+	def test_topdown(self):
+		paths1 = set(it.imap(unicode, self.tmp_dir_idx.viewvalues()))
+		paths1.add(unicode(self.tmp_dir_idx))
+		paths2 = list(sh.walk(unicode(self.tmp_dir_idx)))
+		# Assertion that top-level paths are first in the walk
+		self.assertEqual(set(paths2[:len(paths1)]), paths1)
+
+	def test_topdown_first(self):
+		root = unicode(self.tmp_dir_idx)
+		paths = sh.walk(root)
+		self.assertEqual(next(paths), root)
+
+	def test_depth(self):
+		root = unicode(self.tmp_dir_idx)
+		paths = sh.walk(root, depth=True)
+		self.assertGreater(len(next(paths).split(os.sep)), len(root.split(os.sep)))
+
+	def test_count(self):
+		self.assertEqual(len(list(sh.walk(unicode(self.tmp_dir_idx)))), self.node_count)
+
+	def test_follow_links(self):
+		paths = sh.walk(unicode(self.tmp_dir_idx), follow_links=True)
+		for idx in xrange(self.node_count * 10): self.assertTrue(next(paths))

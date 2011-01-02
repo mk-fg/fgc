@@ -222,7 +222,7 @@ def mv(src, dst, attrz=True, onerror=None):
 
 from collections import deque
 
-def walk(top, depth=False, relative=False, onerror=None, follow_links=False):
+def walk(top, depth=False, onerror=None, follow_links=False):
 	'''Filesystem nodes iterator.
 		Unlike os.walk it does not use recursion and never keeps any more
 			nodes in memory than necessary (listdir returns generator, not lists).
