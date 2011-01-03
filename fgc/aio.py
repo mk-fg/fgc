@@ -2,8 +2,8 @@ from subprocess import Popen, PIPE, STDOUT
 import os, errno, fcntl
 from time import time
 
-from select import poll,\
-	POLLIN, POLLOUT, POLLERR, POLLHUP
+from select import epoll,\
+	EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP
 
 
 # Exit conditions (states)
@@ -23,9 +23,9 @@ class AWrapper(object):
 	def __init__(self, pipe, leash=None):
 		fd = self._fd = pipe.fileno()
 		if leash: self.__leash = leash # fd source object, leashed here to stop gc
-		self._poll_in, self._poll_out = poll(), poll()
-		self._poll_in.register(fd, POLLIN)
-		self._poll_out.register(fd, POLLOUT)
+		self._poll_in, self._poll_out = epoll(), epoll()
+		self._poll_in.register(fd, EPOLLIN)
+		self._poll_out.register(fd, EPOLLOUT)
 		self.close = pipe.close
 		try: # file
 			self.reads = pipe.read
@@ -54,10 +54,10 @@ class AWrapper(object):
 				except IndexError:
 					if state: state = Time
 					break
-				if event != POLLHUP: # some data or error present
+				if event != EPOLLHUP: # some data or error present
 					ext = self.reads(min(bs, self.bs_max) if bs > 0 else self.bs_default) # min() for G+ reads
 					buff += ext
-				if event & POLLHUP: # socket is closed on the other end
+				if event & EPOLLHUP: # socket is closed on the other end
 					if state: state = End
 					break
 				to = deadline - time()
@@ -87,10 +87,10 @@ class AWrapper(object):
 				except IndexError:
 					if state: state = Time
 					break
-				if event != POLLHUP:
+				if event != EPOLLHUP:
 					ext = os.write(fd, buff)
 					bs += ext
-				if event & POLLHUP:
+				if event & EPOLLHUP:
 					if state: state = End
 					break
 				to = deadline - time()
