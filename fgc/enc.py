@@ -1,6 +1,6 @@
 import sys
 enc_default = sys.getdefaultencoding()
-if enc_default == 'ascii': enc_default = 'utf-8' # ascii is always bad idea
+if enc_default in ('ascii', 'ANSI_X3.4-1968'): enc_default = 'utf-8' # ascii is always bad idea
 
 
 from cStringIO import StringIO as sio

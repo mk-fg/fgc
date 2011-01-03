@@ -8,6 +8,7 @@ from __future__ import unicode_literals, print_function
 import itertools as it, operator as op, functools as ft
 
 import os, sys, stat, re, pwd, grp, types
+from fgc.enc import enc_default
 from fgc import os_ext
 from warnings import warn
 
@@ -248,7 +249,7 @@ def walk(top, depth=False, onerror=None, follow_links=False):
 					continue
 			else: stack.append((path, entries))
 
-		for entry in it.imap(ft.partial(join, path), entries):
+		for entry in (join(path, unicode(entry, enc_default)) for entry in entries):
 			try: chk = isdir(entry) and (follow_links or not islink(entry))
 			except (OSError, IOError) as err:
 				if onerror is None: raise
