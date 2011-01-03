@@ -3,7 +3,7 @@
 
 from __future__ import division, unicode_literals, print_function
 import itertools as it, operator as op, functools as ft
-from fgc.enc import enc_default
+from fgc.enc import dec
 
 
 global_env = macro_table = symbol_table = None
@@ -99,8 +99,8 @@ def to_string(x):
 	elif isa(x, Symbol): return x
 	elif isa(x, str): return '"{}"'.format(x.encode('string_escape').replace('"',r'\"'))
 	elif isa(x, list): return '('+' '.join(it.imap(to_string, x))+')'
-	elif isa(x, complex): return unicode(x, enc_default).replace('j', 'i')
-	else: return unicode(x, enc_default)
+	elif isa(x, complex): return dec(x).replace('j', 'i')
+	else: return dec(x)
 
 def load(filename):
 	'Eval every expression from a file.'

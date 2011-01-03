@@ -3,6 +3,11 @@ enc_default = sys.getdefaultencoding()
 if enc_default in ('ascii', 'ANSI_X3.4-1968'): enc_default = 'utf-8' # ascii is always bad idea
 
 
+def dec(string, enc=None):
+	if isinstance(string, unicode): return string
+	else: return unicode(bytes(string), enc or enc_default)
+
+
 from cStringIO import StringIO as sio
 
 def get(src):
