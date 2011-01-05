@@ -44,6 +44,16 @@ def to_gname(gid):
 	except KeyError: return gid
 
 
+def relpath(path, from_path):
+	path, from_path = it.imap(os.path.abspath, (path, from_path))
+	from_path = os.path.dirname(from_path)
+	path, from_path = it.imap(lambda x: x.split(os.sep), (path, from_path))
+	for i in xrange(min(len(from_path), len(path))):
+		if from_path[i] != path[i]: break
+		else: i +=1
+	return join(*([os.pardir] * (len(from_path)-i) + path[i:]))
+
+
 def chown(path, uid=-1, gid=-1, recursive=False, dereference=True):
 	'''Does not check for recursion-loops (although
 		link-recursion will be avoided with dereference=False)'''
@@ -75,7 +85,7 @@ def cat(fsrc, fdst, bs=16*1024, flush=False, sync=False):
 	if sync: os.fsync(fdst.fileno())
 
 
-def _cmp(src, dst):
+def samenode(src, dst):
 	if not isdir(src):
 		try: return os.path.samefile(src, dst)
 		except OSError: return False
@@ -86,8 +96,8 @@ def _cmp(src, dst):
 
 def cp_data(src, dst, append=False, sync=False):
 	'Copy data from src to dst'
-	if _cmp(src, dst):
-		raise Error('{0!r} and {1!r} are the same file'.format(src, dst))
+	if samenode(src, dst):
+		raise Error('{!r} and {!r} are the same file'.format(src, dst))
 	with open(src, 'rb') as fsrc,\
 			open(dst, 'wb' if not append else 'ab') as fdst:
 		cat(fsrc, fdst, sync=sync)
@@ -214,7 +224,7 @@ def mv(src, dst, attrz=True, onerror=None):
 	'''
 	try: os.rename(src, dst)
 	except OSError:
-		if _cmp(src, dst): raise Error('{0!r} and {1!r} are the same object.'.format(src,dst))
+		if samenode(src, dst): raise Error('{!r} and {!r} are the same node.'.format(src,dst))
 		err1 = cp_r( src, dst, dereference=False, attrz=attrz,
 			onerror=onerror, atom=ft.partial(cp_d, skip_ts=False) )
 		err2 = rr(src, onerror=onerror)
