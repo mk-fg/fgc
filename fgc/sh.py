@@ -1,21 +1,34 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals, print_function
-
-
 'My extended version of standard py module "shutil"'
 
 
 import itertools as it, operator as op, functools as ft
 
 import os, sys, stat, re, pwd, grp, types
-from fgc.enc import dec
 from fgc import os_ext
 from warnings import warn
 
 # These are also re-exported
-from os.path import join, islink, isdir, isfile
+from os.path import islink, isdir, isfile
 from os import rmdir
 from fgc.os_ext import listdir
+
+
+
+## Important rule for working with the paths:
+## They ARE bytestrings and should NEVER be implicitly
+##  converted to unicode, since there's no way to convert them
+##  back, short of storing encoding along with the unicode object,
+##  which pretty much what bytestring is.
+
+def _force_bytestrings(paths):
+	for path in paths:
+		assert isinstance(path, types.StringTypes)
+		yield bytes(path)
+
+from os.path import join as _join
+join = lambda *paths: _join(*_force_bytestrings(paths))
 
 
 
@@ -259,7 +272,7 @@ def walk(top, depth=False, onerror=None, follow_links=False):
 					continue
 			else: stack.append((path, entries))
 
-		for entry in (join(path, dec(entry)) for entry in entries):
+		for entry in (join(path, entry) for entry in entries):
 			try: chk = isdir(entry) and (follow_links or not islink(entry))
 			except (OSError, IOError) as err:
 				if onerror is None: raise
@@ -287,7 +300,7 @@ def crawl(top, include=list(), exclude=list(), filter_func=None,
 	include, exclude = ( [re.compile(patterns)] if isinstance( patterns,
 			types.StringTypes ) else list(re.compile(pat) for pat in patterns)
 		for patterns in (include, exclude) )
-	path_rel = lambda x, s=op.itemgetter(slice(len(top), None)): s(x).lstrip('/')
+	path_rel = lambda x, s=op.itemgetter(slice(len(top), None)): s(x).lstrip(b'/')
 
 	iterator, chk = walk(top, **walk_kwz), True
 	entry = next(iterator)
@@ -350,8 +363,8 @@ def glob(pattern):
 	while True:
 		ex = _glob_cbex.search(pattern)
 		if not ex: break
-		subs.append(ex.group(0)[1:-1].split(','))
-		pattern = pattern[:ex.span()[0]] + '{}' + pattern[ex.span()[1]:]
+		subs.append(ex.group(0)[1:-1].split(b','))
+		pattern = pattern[:ex.span()[0]] + b'{}' + pattern[ex.span()[1]:]
 	return it.chain.from_iterable( iglob(pattern.format(*combo))\
 		for combo in it.product(*subs) ) if subs else iglob(pattern)
 
