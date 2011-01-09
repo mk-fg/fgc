@@ -21,6 +21,8 @@ from fgc.os_ext import listdir
 ##  converted to unicode, since there's no way to convert them
 ##  back, short of storing encoding along with the unicode object,
 ##  which pretty much what bytestring is.
+## There can be a problem with this approach on xdev operations,
+##  but "default fs encoding" detection seem to reliably fail, so fuck it.
 
 def _force_bytestrings(paths):
 	for path in paths:
