@@ -101,18 +101,8 @@ static PyObject *Gen_DirListing_next(PyObject *self, PyObject *args) {
 		if (entry->d_name[0] == '.' && ( strlen(entry->d_name) == 1 ||
 			(entry->d_name[1] == '.' && strlen(entry->d_name) == 2) )) continue;
 
-		PyObject *py_entry_bytes = PyString_FromStringAndSize(
-			entry->d_name, strlen(entry->d_name) );
-		if (py_entry_bytes == NULL) return NULL;
-
-		PyObject *py_entry_uc = PyUnicode_FromEncodedObject(
-			py_entry_bytes, Py_FileSystemDefaultEncoding, "strict");
-		if (py_entry_uc == NULL) { // fallback to byte string
-			py_entry_uc = py_entry_bytes;
-			PyErr_Clear(); }
-		else Py_DECREF(py_entry_bytes);
-
-		return py_entry_uc; }
+		return PyString_FromStringAndSize(
+			entry->d_name, strlen(entry->d_name) ); }
 
 	return NULL; }
 
