@@ -10,7 +10,7 @@ sys.dont_write_bytecode = False
 
 setup(
 	name = 'fgc',
-	version = '11.01.10',
+	version = '11.02.0',
 	author = 'Mike Kazantsev',
 	author_email = 'mike_kazantsev@fraggod.net',
 	description = 'Misc stdlib extensions',
@@ -22,7 +22,6 @@ setup(
 	long_description = 'Miscellaneous tools to soften stdlib shortcomings'\
 		' and inconveniences. Legacy stuff, mostly.'\
 		' Not really intended to be used by someone else but author.',
-	# install_requires=['pyyaml'], for single legacy function which shouldn't be used anyway
 	classifiers = [
 		'Development Status :: Eternal Alpha',
 		'Topic :: Utilities',
