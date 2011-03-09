@@ -2,7 +2,7 @@ import itertools as it, operator as op, functools as ft
 from fgc.stracl import from_mode as stracl_from_mode,\
 	get as stracl_get, set as stracl_set,\
 	ACL_TYPE_ACCESS, ACL_TYPE_DEFAULT
-from fgc.sh import mode, Error
+from fgc.sh import Error
 import os, types
 
 
@@ -46,16 +46,17 @@ _mode_bits = (
 	0040, 0020, 0010, # --- rwx ---
 	0004, 0002, 0001 )# --- --- rwx
 
+def mode(strspec, base=0):
+	for n in xrange(len(_mode_bits)):
+		if strspec[n] != '-': base |= _mode_bits[n]
+	return base
+
 def get_mode(acl):
 	'Get mode from acl, path, file or fd'
 	if isinstance(acl, (int, types.StringTypes)):
 		acl = get(acl, mode_filter=True, acl_type=ACL_TYPE_ACCESS)
 	acl = dict((line[0], line[3:]) for line in it.ifilter(_mode, acl))
-	acl = ''.join(acl[x] for x in 'ugo')
-	mode = 0
-	for n in xrange(len(_mode_bits)):
-		if acl[n] != '-': mode |= _mode_bits[n]
-	return mode
+	return mode(''.join(acl[x] for x in 'ugo'))
 
 
 def rebase(acl, node, base=None, discard_old_mode=False):
