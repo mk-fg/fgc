@@ -41,12 +41,21 @@ def get( node, mode_filter=None,
 	return list(acl)
 
 
+_mode_bits = (
+	0400, 0200, 0100, # rwx --- ---
+	0040, 0020, 0010, # --- rwx ---
+	0004, 0002, 0001 )# --- --- rwx
+
 def get_mode(acl):
 	'Get mode from acl, path, file or fd'
 	if isinstance(acl, (int, types.StringTypes)):
 		acl = get(acl, mode_filter=True, acl_type=ACL_TYPE_ACCESS)
 	acl = dict((line[0], line[3:]) for line in it.ifilter(_mode, acl))
-	return mode(''.join(acl[x] for x in 'ugo'))
+	acl = ''.join(acl[x] for x in 'ugo')
+	mode = 0
+	for n in xrange(len(_mode_bits)):
+		if acl[n] != '-': mode |= _mode_bits[n]
+	return mode
 
 
 def rebase(acl, node, base=None, discard_old_mode=False):
