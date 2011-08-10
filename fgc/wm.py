@@ -1,7 +1,6 @@
 import itertools as it, operator as op, functools as ft
 from fgc.dta import cached, ProxyObject
 
-import gtk
 from Xlib import X, display
 
 
@@ -38,6 +37,7 @@ class Window(ProxyObject):
 
 	@classmethod
 	def from_xwin(cls, xwin, xwin_iter=None):
+		import gtk
 		win = cls(gtk.gdk.window_foreign_new(xwin.id))
 		if xwin_iter is not None: win._xwin_iter = xwin_iter
 		win._xwin = xwin
@@ -57,6 +57,7 @@ class Window(ProxyObject):
 
 	@classmethod
 	def get_active(cls, screen=None):
+		import gtk
 		if screen is None: screen = gtk.gdk.screen_get_default()
 
 		if screen.supports_net_wm_hint('_NET_ACTIVE_WINDOW') \
@@ -97,6 +98,7 @@ class Window(ProxyObject):
 
 
 	def bounds_chk(self, jitter=None, state=None):
+		import gtk
 		if state is not None and self.get_state() & state: return True
 		xlib_props = self._xlib_win.get_property(
 			_xlib_atom('_NET_WM_STATE'), X.AnyPropertyType, 0, 100 )
@@ -116,11 +118,13 @@ class Window(ProxyObject):
 
 	@property
 	def maximized(self):
+		import gtk
 		return self.bounds_chk( 50,
 			gtk.gdk.WINDOW_STATE_MAXIMIZED )
 
 	@property
 	def fullscreen(self):
+		import gtk
 		return self.bounds_chk( 0,
 			gtk.gdk.WINDOW_STATE_FULLSCREEN )
 
