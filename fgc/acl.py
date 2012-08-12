@@ -1,6 +1,6 @@
 import itertools as it, operator as op, functools as ft
 from fgc.stracl import from_mode as stracl_from_mode,\
-	get as stracl_get, set as stracl_set,\
+	get as stracl_get, set as stracl_set, unset,\
 	ACL_TYPE_ACCESS, ACL_TYPE_DEFAULT
 from fgc.sh import Error
 import os, types
@@ -97,6 +97,11 @@ def apply(acl, node):
 				_def_strip, it.ifilter(_def_get, acl) )),
 			node, ACL_TYPE_DEFAULT )
 
+def fix_mask(node):
+	'''Fix mask-crippled acls after chmod
+		by updating mask from ACL entries.'''
+	return apply(get(node, effective=False), node)
+
 
 def update(base, ext):
 	'Rebase one ACL on top of the other'
@@ -130,4 +135,3 @@ def is_mode(acl):
 	for line in acl:
 		if not _mode(line) or _def_get(line): return False
 	else: return True
-

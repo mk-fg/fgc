@@ -54,6 +54,28 @@ stracl_set(PyObject *self, PyObject *args) { // (str) acl, (int) fd / (str) path
 
 
 static PyObject *
+acl_unset(PyObject *self, PyObject *args) { // (int) fd / (str) path / (file) file
+	char *stracl; PyObject *file; int acl_type = ACL_TYPE_ACCESS;
+	if (!PyArg_ParseTuple(args, "O|i", &file, &acl_type)) return NULL;
+	acl_t acl;
+	acl = acl_init(5);
+	if (!acl) return NULL;
+	int err;
+	if (PyString_Check(file)) err = acl_set_file(PyString_AsString(file), acl_type, acl);
+	else if (PyFile_Check(file)) err = acl_set_fd(PyObject_AsFileDescriptor(file), acl);
+	else if (PyInt_Check(file)) err = acl_set_fd(PyInt_AsLong(file), acl);
+	else {
+		PyErr_SetString( PyExc_TypeError,
+			"Expecting file object, descriptor int or path string" );
+		return NULL; }
+	if (err) {
+		PyErr_SetString(PyExc_OSError, strerror(errno));
+		return NULL; }
+	acl_free(acl);
+	Py_RETURN_NONE; };
+
+
+static PyObject *
 stracl_from_mode(PyObject *self, PyObject *args) { // (int) mode
 	int mode;
 	if (!PyArg_ParseTuple(args, "i", &mode)) return NULL;
@@ -69,6 +91,8 @@ static PyMethodDef stracl_methods[] = {
 		"Get ACL string from path, file or descriptor.\n"},
 	{"set", stracl_set, METH_VARARGS,
 		"Set ACL from string to a path, file or descriptor.\n"},
+	{"unset", acl_unset, METH_VARARGS,
+		"Delete ACL from a path, file or descriptor.\n"},
 	{"from_mode", stracl_from_mode, METH_VARARGS,
 		"Get ACL string from mode int.\n"},
 	{NULL, NULL, 0, NULL} };
@@ -84,4 +108,3 @@ initstracl(void) {
 
 	PyFlag(module, ACL_TYPE_ACCESS);
 	PyFlag(module, ACL_TYPE_DEFAULT); };
-
