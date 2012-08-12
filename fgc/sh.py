@@ -6,13 +6,13 @@ from __future__ import unicode_literals, print_function
 import itertools as it, operator as op, functools as ft
 
 import os, sys, stat, re, pwd, grp, types
-from fgc import os_ext
+from . import os_ext, Error
 from warnings import warn
 
 # These are also re-exported
 from os.path import islink, isdir, isfile
 from os import rmdir
-from fgc.os_ext import listdir
+from .os_ext import listdir
 
 
 
@@ -34,7 +34,6 @@ join = lambda *paths: _join(*_force_bytestrings(paths))
 
 
 
-class Error(Exception): pass
 
 
 def resolve_ids(uid=-1, gid=-1):

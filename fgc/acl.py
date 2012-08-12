@@ -1,8 +1,8 @@
 import itertools as it, operator as op, functools as ft
-from fgc.stracl import from_mode as stracl_from_mode,\
+from .stracl import from_mode as stracl_from_mode,\
 	get as stracl_get, set as stracl_set, unset,\
 	ACL_TYPE_ACCESS, ACL_TYPE_DEFAULT
-from fgc.sh import Error
+from . import Error
 import os, types
 
 

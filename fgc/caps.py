@@ -2,7 +2,7 @@
 
 import itertools as it, operator as op, functools as ft
 from copy import deepcopy
-from fgc import strcaps
+from . import strcaps
 
 
 sets_cap = ['permitted', 'inheritable', 'effective']

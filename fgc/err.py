@@ -1,5 +1,5 @@
-from fgc.compat import string_types
-from fgc.enc import enc_default
+from .compat import string_types
+from .enc import enc_default
 import sys, traceback
 
 max_val_len = 70

@@ -1,5 +1,5 @@
 import itertools as it, operator as op, functools as ft
-from fgc.dta import cached, ProxyObject
+from .dta import cached, ProxyObject
 
 from Xlib import X, display
 

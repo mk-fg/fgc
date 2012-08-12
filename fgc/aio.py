@@ -12,7 +12,7 @@ class Size: pass # hit-the-size-limit state
 class End: pass # hit-the-end state
 
 
-from fgc.compat import buffer
+from .compat import buffer
 
 class AWrapper(object):
 	'''Async I/O objects wrapper'''
@@ -114,7 +114,7 @@ class FileBridge(object):
 
 
 
-from fgc.compat import string_types
+from .compat import string_types
 import signal
 
 class AExec(Popen):

@@ -3,7 +3,7 @@
 
 from __future__ import division, unicode_literals, print_function
 import itertools as it, operator as op, functools as ft
-from fgc.enc import dec
+from .enc import dec
 
 
 global_env = macro_table = symbol_table = None
