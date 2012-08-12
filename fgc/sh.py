@@ -9,6 +9,9 @@ import os, sys, stat, re, pwd, grp, types
 from . import os_ext, Error
 from warnings import warn
 
+try: from . import acl
+except ImportError: acl = None
+
 # These are also re-exported
 from os.path import islink, isdir, isfile
 from os import rmdir
@@ -123,11 +126,23 @@ def cp_meta(src, dst, attrz=False, dereference=True, skip_ts=None):
 		if dereference else (os.lchown, os.lstat, os_ext.lutimes)
 	st = st(src) if isinstance(src, types.StringTypes) else src
 	mode = stat.S_IMODE(st.st_mode)
+	src_acl = None
+	if acl:
+		src_acl = set(acl.get(src, effective=False))
+		if not acl.is_mode(src_acl):
+			src_acl_eff = set(acl.get(src, effective=True))
+			if src_acl != src_acl_eff: # apply full acl, chmod, then apply effective acl
+				acl.apply(src_acl, dst)
+				src_acl = src_acl_eff
+		else:
+			acl.unset(dst)
+			src_acl = None
 	if dereference: os.chmod(dst, mode)
 	else:
 		try: os.lchmod(dst, mode)
 		except AttributeError: # linux does not support symlink modes
 			if not os.path.islink(dst): os.chmod(dst, mode)
+	if src_acl: acl.apply(src_acl, dst)
 	if attrz: chown(dst, st.st_uid, st.st_gid)
 	if (attrz if skip_ts is None else not skip_ts):
 		if dereference and islink(dst): dst = os.readlink(dst)
