@@ -127,7 +127,7 @@ def cp_meta(src, dst, attrz=False, dereference=True, skip_ts=None):
 	st = st(src) if isinstance(src, types.StringTypes) else src
 	mode = stat.S_IMODE(st.st_mode)
 	src_acl = None
-	if acl:
+	if acl and isinstance(src, (file, bytes, int)): # just not a stat result
 		src_acl = set(acl.get(src, effective=False))
 		if not acl.is_mode(src_acl):
 			src_acl_eff = set(acl.get(src, effective=True))
@@ -153,12 +153,11 @@ def cp_meta(src, dst, attrz=False, dereference=True, skip_ts=None):
 def cp(src, dst, attrz=False, dereference=True, sync=False, skip_ts=None):
 	'Copy data and mode bits ("cp src dst"). The destination may be a dir.'
 	if isdir(dst): dst = join(dst, os.path.basename(src))
-	src_stat = (os.stat if dereference else os.lstat)(src)
-	if not any( f(src_stat.st_mode) for f in
+	if not any( f((os.stat if dereference else os.lstat)(src).st_mode) for f in
 			op.attrgetter('S_ISREG', 'S_ISDIR', 'S_ISLNK')(stat) ):
 		raise Error('Node is not a file/dir/link, cp of these is not supported.')
 	cp_data(src, dst, sync=sync)
-	return cp_meta(src_stat, dst, attrz=attrz, skip_ts=skip_ts)
+	return cp_meta(src, dst, attrz=attrz, skip_ts=skip_ts)
 
 cp_p = lambda src,dst: cp(src, dst, attrz=True)
 
