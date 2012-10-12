@@ -1,6 +1,9 @@
+from __future__ import print_function
+
 from .compat import string_types
 from .enc import enc_default
-import sys, traceback
+from os.path import basename
+import sys, inspect, traceback
 
 max_val_len = 70
 
@@ -35,3 +38,21 @@ def _ext_traceback_locals(stack):
 			except UnicodeError: val = u'<some gibberish>'
 			message += u'{0!s}\n'.format(val[:max_val_len])
 	return message
+
+def functrace( log=None,
+		fmt='Functrace -- {filename}: {function},\n  {posargs},\n  {args}.' ):
+	'Dump file, name and arguments of a caller function.'
+	frame = inspect.stack()[1][0]
+	filename, lineno, function = inspect.getframeinfo(frame)[:3]
+	posname, kwname, args = inspect.getargvalues(frame)[-3:]
+	posargs = args.pop(posname, [])
+	args.update(args.pop(kwname, []))
+	msg = fmt.format( filename=basename(filename),
+		lineno=lineno, function=function, posargs=list(posargs), args=args )
+	if log == 'twisted':
+		from twisted.python import log
+		log.msg(msg)
+	elif log:
+		import logging
+		logging.fatal(msg)
+	else: print(msg, file=sys.stderr)
