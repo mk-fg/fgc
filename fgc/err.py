@@ -39,7 +39,7 @@ def _ext_traceback_locals(stack):
 			message += u'{0!s}\n'.format(val[:max_val_len])
 	return message
 
-def functrace( log=None,
+def functrace( log=None, args_max_len=200,
 		fmt='Functrace -- {filename}: {function},\n  {posargs},\n  {args}.' ):
 	'Dump file, name and arguments of a caller function.'
 	frame = inspect.stack()[1][0]
@@ -47,6 +47,13 @@ def functrace( log=None,
 	posname, kwname, args = inspect.getargvalues(frame)[-3:]
 	posargs = args.pop(posname, [])
 	args.update(args.pop(kwname, []))
+	if args_max_len:
+		def v_trim(v):
+			if not isinstance(v, string_types): v = repr(v)
+			if len(v) > args_max_len: v = v[:args_max_len] + '...'
+			return v
+		posargs = map(v_trim, posargs)
+		args = dict((k, v_trim(v)) for k,v in args.viewitems())
 	msg = fmt.format( filename=basename(filename),
 		lineno=lineno, function=function, posargs=list(posargs), args=args )
 	if log == 'twisted':
