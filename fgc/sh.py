@@ -396,22 +396,23 @@ import signal, errno, fcntl
 
 class LockError(Error): pass
 
-def flock( filespec, contents=None,
+def flock( filespec, contents=None, shared=False,
 		add_newline=True, block=False, fcntl_args=tuple() ):
 	'''Simple and supposedly-reliable advisory file locking.
 		Uses SIGALRM for timeout, if "block" argument is specified.
 		filespec can be a path (bytes/unicode), fd (int) or file object.
 		Returned file object can be safely discarded if it's built from fd or another object.'''
 
+	shared = fcntl.LOCK_EX if not shared else fcntl.LOCK_SH
 	try:
 		lock = open(filespec, 'ab+', closefd=isinstance(filespec, types.StringTypes))\
 			if isinstance(filespec, (int, types.StringTypes)) else filespec
-		if not block: fcntl.lockf(lock, fcntl.LOCK_EX | fcntl.LOCK_NB, *fcntl_args)
+		if not block: fcntl.lockf(lock, shared | fcntl.LOCK_NB, *fcntl_args)
 		else:
 			prev_alarm = signal.alarm(block)
 			if prev_alarm: prev_alarm = time() + prev_alarm
 			prev_alarm_handler = signal.signal(signal.SIGALRM, lambda sig,frm: None)
-			try: fcntl.lockf(lock, fcntl.LOCK_EX, *fcntl_args)
+			try: fcntl.lockf(lock, shared, *fcntl_args)
 			except (OSError, IOError) as err:
 				if err.errno != errno.EINTR: raise
 				else: raise LockError('Timeout has passed ({})'.format(block))
