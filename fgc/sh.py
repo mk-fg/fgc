@@ -111,12 +111,14 @@ def samenode(src, dst):
 			== os.path.normcase(os.path.abspath(dst)) )
 
 
-def cp_data(src, dst, append=False, sync=False):
+def cp_data(src, dst, append=False, sync=False, trunc_call=False):
 	'Copy data from src to dst'
 	if samenode(src, dst):
 		raise Error('{!r} and {!r} are the same file'.format(src, dst))
+	if append: trunc_call = False
 	with open(src, 'rb') as fsrc,\
-			open(dst, 'wb' if not append else 'ab') as fdst:
+			open(dst, ('wb' if not trunc_call else 'rb+') if not append else 'ab') as fdst:
+		if trunc_call: fdst.truncate()
 		cat(fsrc, fdst, sync=sync)
 
 
