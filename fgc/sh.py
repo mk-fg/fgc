@@ -122,8 +122,8 @@ def cp_data(src, dst, append=False, sync=False, trunc_call=False):
 		cat(fsrc, fdst, sync=sync)
 
 
-def cp_meta(src, dst, attrz=False, dereference=True, skip_ts=None):
-	'Copy mode or full attrz (atime, mtime and ownership) from src to dst'
+def cp_meta(src, dst, attrs=False, dereference=True, skip_ts=None):
+	'Copy mode or full attrs (atime, mtime and ownership) from src to dst'
 	chown, st, utime_set = (os.chown, os.stat, os.utime)\
 		if dereference else (os.lchown, os.lstat, os_ext.lutimes)
 	st = st(src) if isinstance(src, types.StringTypes) else src
@@ -145,40 +145,40 @@ def cp_meta(src, dst, attrz=False, dereference=True, skip_ts=None):
 		except AttributeError: # linux does not support symlink modes
 			if not os.path.islink(dst): os.chmod(dst, mode)
 	if src_acl: acl.apply(src_acl, dst)
-	if attrz: chown(dst, st.st_uid, st.st_gid)
-	if (attrz if skip_ts is None else not skip_ts):
+	if attrs: chown(dst, st.st_uid, st.st_gid)
+	if (attrs if skip_ts is None else not skip_ts):
 		if dereference and islink(dst): dst = os.readlink(dst)
 		utime_set(dst, (st.st_atime, st.st_mtime))
 	return st
 
 
-def cp(src, dst, attrz=False, dereference=True, sync=False, skip_ts=None):
+def cp(src, dst, attrs=False, dereference=True, sync=False, skip_ts=None):
 	'Copy data and mode bits ("cp src dst"). The destination may be a dir.'
 	if isdir(dst): dst = join(dst, os.path.basename(src))
 	if not any( f((os.stat if dereference else os.lstat)(src).st_mode) for f in
 			op.attrgetter('S_ISREG', 'S_ISDIR', 'S_ISLNK')(stat) ):
 		raise Error('Node is not a file/dir/link, cp of these is not supported.')
 	cp_data(src, dst, sync=sync)
-	return cp_meta(src, dst, attrz=attrz, skip_ts=skip_ts)
+	return cp_meta(src, dst, attrs=attrs, skip_ts=skip_ts)
 
-cp_p = lambda src,dst: cp(src, dst, attrz=True)
+cp_p = lambda src,dst: cp(src, dst, attrs=True)
 
-def cp_d(src, dst, attrz=False, dereference=True, sync=False, skip_ts=None):
+def cp_d(src, dst, attrs=False, dereference=True, sync=False, skip_ts=None):
 	'Copy only one node, whatever it is.'
 	if not dereference and islink(src):
 		os.symlink(os.readlink(src), dst)
 		return cp_meta( src, dst,
-			dereference=False, attrz=attrz, skip_ts=skip_ts )
+			dereference=False, attrs=attrs, skip_ts=skip_ts )
 	elif isdir(src):
 		try:
 			os.mkdir(dst)
-			return cp_meta(src, dst, attrz=attrz, skip_ts=skip_ts)
+			return cp_meta(src, dst, attrs=attrs, skip_ts=skip_ts)
 		except OSError as err: raise Error(err)
-	else: return cp(src, dst, attrz=attrz, sync=sync, skip_ts=skip_ts)
+	else: return cp(src, dst, attrs=attrs, sync=sync, skip_ts=skip_ts)
 
 
 def cp_r( src, dst, dereference=True,
-		attrz=False, onerror=False, atom=cp_d, **crawl_kwz ):
+		attrs=False, onerror=False, atom=cp_d, **crawl_kwz ):
 	'''
 	Recursively copy a directory tree.
 
@@ -204,7 +204,7 @@ def cp_r( src, dst, dereference=True,
 			relative=True, onerror=onerror, **crawl_kwz ):
 		try:
 			src_node, dst_node = (join(src, entity), join(dst, entity)) if entity else (src, dst)
-			atom(src_node, dst_node, dereference=dereference, attrz=attrz)
+			atom(src_node, dst_node, dereference=dereference, attrs=attrs)
 		except (IOError, OSError, Error) as err:
 			if onerror is None: raise Error(err)
 			else: onerror(src_node, dst_node, err)
@@ -240,7 +240,7 @@ def rr(path, onerror=False, **crawl_kwz):
 		onerror=onerror, **crawl_kwz): rm(entity, onerror=onerror)
 
 
-def mv(src, dst, attrz=True, onerror=None):
+def mv(src, dst, attrs=True, onerror=None):
 	'''
 	Recursively move a path.
 
@@ -249,13 +249,13 @@ def mv(src, dst, attrz=True, onerror=None):
 	A lot more could be done here...  A look at a mv.c shows a lot of
 	the issues this implementation glosses over.
 
-	attrz determines whether privileged attrz like uid/gid will be
+	attrs determines whether privileged attrs like uid/gid will be
 	manipulated. Timestamps are always preserved.
 	'''
 	try: os.rename(src, dst)
 	except OSError:
 		if samenode(src, dst): raise Error('{!r} and {!r} are the same node.'.format(src,dst))
-		err1 = cp_r( src, dst, dereference=False, attrz=attrz,
+		err1 = cp_r( src, dst, dereference=False, attrs=attrs,
 			onerror=onerror, atom=ft.partial(cp_d, skip_ts=False) )
 		err2 = rr(src, onerror=onerror)
 		if err1 is not None: return err1 + err2
