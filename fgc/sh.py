@@ -129,7 +129,7 @@ def cp_meta(src, dst, attrs=False, dereference=True, skip_ts=None):
 	st = st(src) if isinstance(src, types.StringTypes) else src
 	mode = stat.S_IMODE(st.st_mode)
 	src_acl = None
-	if acl and isinstance(src, (file, bytes, int)): # just not a stat result
+	if attrs and acl and isinstance(src, (file, bytes, int)): # just not a stat result
 		src_acl = set(acl.get(src, effective=False))
 		if not acl.is_mode(src_acl):
 			src_acl_eff = set(acl.get(src, effective=True))
@@ -144,8 +144,9 @@ def cp_meta(src, dst, attrs=False, dereference=True, skip_ts=None):
 		try: os.lchmod(dst, mode)
 		except AttributeError: # linux does not support symlink modes
 			if not os.path.islink(dst): os.chmod(dst, mode)
-	if src_acl: acl.apply(src_acl, dst)
-	if attrs: chown(dst, st.st_uid, st.st_gid)
+	if attrs:
+		if src_acl: acl.apply(src_acl, dst)
+		chown(dst, st.st_uid, st.st_gid)
 	if (attrs if skip_ts is None else not skip_ts):
 		if dereference and islink(dst): dst = os.readlink(dst)
 		utime_set(dst, (st.st_atime, st.st_mtime))
