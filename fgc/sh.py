@@ -200,9 +200,10 @@ def cp_r( src, dst, dereference=True,
 	'''
 	if onerror is False: errors, onerror = list(), lambda *args: errors.append(args)
 	else: errors = None
+	crawl_kwz.setdefault('follow_links', dereference)
 
 	for entity in crawl( src, depth=False,
-			relative=True, onerror=onerror, follow_links=dereference, **crawl_kwz ):
+			relative=True, onerror=onerror, **crawl_kwz ):
 		try:
 			src_node, dst_node = (join(src, entity), join(dst, entity)) if entity else (src, dst)
 			atom(src_node, dst_node, dereference=dereference, attrs=attrs)
