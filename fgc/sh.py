@@ -202,7 +202,7 @@ def cp_r( src, dst, dereference=True,
 	else: errors = None
 
 	for entity in crawl( src, depth=False,
-			relative=True, onerror=onerror, **crawl_kwz ):
+			relative=True, onerror=onerror, follow_links=dereference, **crawl_kwz ):
 		try:
 			src_node, dst_node = (join(src, entity), join(dst, entity)) if entity else (src, dst)
 			atom(src_node, dst_node, dereference=dereference, attrs=attrs)
