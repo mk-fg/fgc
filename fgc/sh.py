@@ -5,9 +5,10 @@ from __future__ import unicode_literals, print_function
 
 import itertools as it, operator as op, functools as ft
 
-import os, sys, stat, re, pwd, grp, types
+from contextlib import contextmanager
 from . import os_ext, Error
-from warnings import warn
+import os, sys, stat, re, pwd, grp, types
+import re, tempfile
 
 try: from . import acl
 except ImportError: acl = None
@@ -438,6 +439,59 @@ def flock( filespec, contents=None, shared=False,
 		lock.flush()
 
 	return lock
+
+
+_xmatch_pat_cache = {}
+
+def _fn_xmatch_pat(pat):
+	# From sphinx.util.matching
+	i, n, res = 0, len(pat), ''
+	while i < n:
+		c, i = pat[i], i + 1
+		if c == '*':
+			# double star matches slashes too
+			if i < n and pat[i] == '*': res, i = res + '.*', i + 1
+			# single star doesn't match slashes
+			else: res = res + '[^/]*'
+		# question mark doesn't match slashes too
+		elif c == '?': res = res + '[^/]'
+		elif c == '[':
+			j = i
+			if j < n and pat[j] == '!': j += 1
+			if j < n and pat[j] == ']': j += 1
+			while j < n and pat[j] != ']': j += 1
+			if j >= n: res = res + '\\['
+			else:
+				stuff, i = pat[i:j].replace('\\', '\\\\'), j + 1
+				# negative pattern mustn't match slashes too
+				if stuff[0] == '!': stuff = '^/' + stuff[1:]
+				elif stuff[0] == '^': stuff = '\\' + stuff
+				res = '{}[{}]'.format(res, stuff)
+		else: res += re.escape(c)
+	return re.compile('^' + res + '$')
+
+def fn_xmatch_pat(pat):
+	if pat not in _xmatch_pat_cache:
+		_xmatch_pat_cache[pat] = _fn_xmatch_pat(pat)
+	return _xmatch_pat_cache[pat]
+
+def fn_xmatch(pat, name):
+	'Same as fnmatch, but proper arg order and only matches slashes by **.'
+	return fn_xmatch_pat(pat).search(name)
+
+
+@contextmanager
+def dump_tempfile(path):
+	kws = dict( delete=False,
+		dir=os.path.dirname(path), prefix=os.path.basename(path)+'.' )
+	with NamedTemporaryFile(**kws) as tmp:
+		try:
+			yield tmp
+			tmp.flush()
+			os.rename(tmp.name, path)
+		finally:
+			try: os.unlink(tmp.name)
+			except (OSError, IOError): pass
 
 
 from weakref import ref
