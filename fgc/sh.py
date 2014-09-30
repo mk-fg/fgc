@@ -8,7 +8,7 @@ import itertools as it, operator as op, functools as ft
 from contextlib import contextmanager
 from . import os_ext, Error
 import os, sys, stat, re, pwd, grp, types
-import re, tempfile
+import re, tempfile, fcntl
 
 try: from . import acl
 except ImportError: acl = None
@@ -60,6 +60,36 @@ def to_uname(uid):
 def to_gname(gid):
 	try: return grp.getgrgid(gid).gr_name
 	except KeyError: return gid
+
+
+def parse_uid_spec(uid_spec):
+	def parse_id(spec, name_func):
+		spec = bytes(spec)
+		if spec.isdigit(): return int(spec)
+		return name_func(spec)
+	uid_spec = uid_spec.rstrip(':')
+	if ':' not in uid_spec:
+		uid = parse_id( uid_spec,
+			lambda spec: pwd.getpwnam(spec).pw_uid )
+		gid = pwd.getpwuid(uid).pw_gid
+	else:
+		uid, gid = uid_spec.split(':', 1)
+		uid = parse_id( uid,
+			lambda spec: pwd.getpwnam(spec).pw_uid )
+		gid = parse_id( gid,
+			lambda spec: grp.getgrnam(spec).gr_gid )
+	return uid, gid
+
+def drop_privileges(uid_spec=None, uid=None, gid=None, log=None):
+	if log is False: log = lambda *a,**k: None
+	elif log is None: log = logging.getLogger('fgc.sh.drop_privileges')
+	if uid_spec:
+		assert not (uid or gid), [uid_spec, uid, gid]
+		uid, gid = parse_uid_spec(uid_spec)
+	assert uid is not None and gid is not None, [uid_spec, uid, gid]
+	os.setresgid(gid, gid, gid)
+	os.setresuid(uid, uid, uid)
+	log.debug('Switched uid/gid to %s:%s', uid, gid)
 
 
 def relpath(path, from_path):
@@ -481,17 +511,35 @@ def fn_xmatch(pat, name):
 
 
 @contextmanager
-def dump_tempfile(path):
+def safe_replacement(path, mode=None):
+	if mode is None:
+		try: mode = stat.S_IMODE(os.lstat(path).st_mode)
+		except (OSError, IOError): pass
 	kws = dict( delete=False,
 		dir=os.path.dirname(path), prefix=os.path.basename(path)+'.' )
-	with NamedTemporaryFile(**kws) as tmp:
+	with tempfile.NamedTemporaryFile(**kws) as tmp:
 		try:
+			if mode is not None: os.fchmod(tmp.fileno(), mode)
 			yield tmp
-			tmp.flush()
+			if not tmp.closed: tmp.flush()
 			os.rename(tmp.name, path)
 		finally:
 			try: os.unlink(tmp.name)
 			except (OSError, IOError): pass
+
+def with_src_lock(shared=False):
+	lock = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
+	def _decorator(func):
+		@ft.wraps(func)
+		def _wrapper(src, *args, **kws):
+			fcntl.lockf(src, lock)
+			try: return func(src, *args, **kws)
+			finally:
+				try: fcntl.lockf(src, fcntl.LOCK_UN)
+				except (OSError, IOError) as err:
+					log.exception('Failed to unlock file object: %s', err)
+		return _wrapper
+	return _decorator
 
 
 from weakref import ref

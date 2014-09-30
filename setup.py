@@ -8,7 +8,7 @@ sys.dont_write_bytecode = False
 
 setup(
 	name = 'fgc',
-	version = '14.09.3',
+	version = '14.09.4',
 	author = 'Mike Kazantsev',
 	author_email = 'mk.fraggod@gmail.com',
 	description = 'Misc stdlib extensions',

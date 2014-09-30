@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+from __future__ import print_function
+
+
 from ftplib import FTP, print_line, _GLOBAL_DEFAULT_TIMEOUT, CRLF, Error
 import ssl, collections
 
@@ -102,7 +106,7 @@ class FTP_TLS(FTP, object):
 		fp = conn.makefile('rb')
 		while True:
 			buff = fp.readline()
-			if self.debugging > 2: print '*retr*', repr(buff)
+			if self.debugging > 2: print('*retr*', repr(buff))
 			if not buff: break
 			if buff[-2:] == CRLF: buff = buff[:-2]
 			elif buff[-1:] == '\n': buff = buff[:-1]
@@ -153,3 +157,57 @@ class FTP_TLS(FTP, object):
 		except Error as ex:
 			try: self.close()
 			except: pass
+
+
+import socket, random, re
+
+class AddressError(Exception): pass
+
+def get_socket_info( host,
+		port=0, family=0, socktype=0, protocol=0,
+		force_unique_address=None, pick_random=False, log=None ):
+	if log is False: log = lambda *a,**k: None
+	elif log is None: log = logging.getLogger('fgc.net.get_socket_info')
+	log_params = [port, family, socktype, protocol]
+	log.debug('Resolving addr: %r (params: %s)', host, log_params)
+	host = re.sub(r'^\[|\]$', '', host)
+	try:
+		addrinfo = socket.getaddrinfo(host, port, family, socktype, protocol)
+		if not addrinfo: raise socket.gaierror('No addrinfo for host: {}'.format(host))
+	except (socket.gaierror, socket.error) as err:
+		raise AddressError( 'Failed to resolve host:'
+			' {!r} (params: {}) - {} {}'.format(host, log_params, type(err), err) )
+
+	ai_af, ai_addr = set(), list()
+	for family, _, _, hostname, addr in addrinfo:
+		ai_af.add(family)
+		ai_addr.append((addr[0], family))
+
+	if pick_random: return random.choice(ai_addr)
+
+	if len(ai_af) > 1:
+		af_names = dict((v, k) for k,v in vars(socket).viewitems() if k.startswith('AF_'))
+		ai_af_names = list(af_names.get(af, str(af)) for af in ai_af)
+		if socket.AF_INET not in ai_af:
+			log.fatal(
+				'Ambiguous socket host specification (matches address famlies: %s),'
+					' refusing to pick one at random - specify socket family instead. Addresses: %s',
+				', '.join(ai_af_names), ', '.join(ai_addr) )
+			raise AddressError
+		(log.warn if force_unique_address is None else log.info)\
+			( 'Specified host matches more than one address'
+				' family (%s), using it as IPv4 (AF_INET)', ai_af_names )
+		af = socket.AF_INET
+	else: af = list(ai_af)[0]
+
+	for addr, family in ai_addr:
+		if family == af: break
+	else: raise AddressError
+	ai_addr_unique = set(ai_addr)
+	if len(ai_addr_unique) > 1:
+		if force_unique_address:
+			raise AddressError('Address matches more than one host: {}'.format(ai_addr_unique))
+		log.warn( 'Specified host matches more than'
+			' one address (%s), using first one: %s', ai_addr_unique, addr )
+
+	return af, addr

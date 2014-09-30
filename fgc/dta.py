@@ -1,9 +1,13 @@
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals, print_function
+
+
 import itertools as it, operator as op, functools as ft
-
-
-import types
 from collections import Mapping
-types.MethodWrapperType = type(object().__hash__)
+import types
+
+
+MethodWrapperType = type(object().__hash__)
 
 class AttrDict(dict):
 	def __init__(self, *argz, **kwz):
@@ -22,7 +26,7 @@ class AttrDict(dict):
 		return cls( (attr, getattr(optz, attr))
 			for attr in dir(optz) if attr[0] != '_' and not isinstance( attr,
 				(types.BuiltinMethodType, types.MethodType,
-					types.MethodWrapperType, types.TypeType) ) )\
+					MethodWrapperType, types.TypeType) ) )\
 			if not isinstance(optz, Mapping) else cls(optz)
 
 
@@ -37,13 +41,15 @@ def chain(*argz, **kwz):
 					if not nonempty or not sub is None: yield sub
 			except TypeError: yield arg
 
-
 def coroutine(proc):
 	def init(*argz,**kwz):
 		cr = proc(*argz,**kwz)
 		cr.next()
 		return cr
 	return init
+
+it_ngrams = lambda seq, n: zip(*(it.islice(seq, i, None) for i in xrange(n)))
+it_adjacent = lambda seq, n: zip(*([iter(seq)] * n))
 
 
 _cache, _cache_func = dict(), None
