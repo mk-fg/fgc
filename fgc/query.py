@@ -2,7 +2,7 @@
 from __future__ import print_function
 
 import itertools as it, operator as op, functools as ft
-import re
+import re, math
 
 import pyparsing as pp
 pp.ParserElement.enablePackrat()
@@ -16,8 +16,9 @@ class Grammar(object):
 	ops_pow = {} # {'**': op.pow, log} - not used here
 	ops_math = dict(it.chain.from_iterable(v.viewitems() for v in [ops_add, ops_mult, ops_pow]))
 
-	op_c, op_nc = lambda a,b: a in b, lambda a,b: a not in b # op.contains is backwards
-	ops_sets = {'in': op_c, '∈': op_c, 'not_in': op_nc}
+	_op_c, _op_nc = lambda a,b: a in b, lambda a,b: a not in b # op.contains is backwards
+	ops_sets = {'in': _op_c, '∈': _op_c, 'not_in': _op_nc}
+	ops_func = {'abs': abs, 'ceil': math.ceil, 'floor': math.floor, 'round': lambda n: int(round(n))}
 	ops_comparison = {
 		'<': op.lt, '<=': op.le, '>': op.gt, '>=': op.ge,
 		'is': op.is_, 'is_not': op.is_not,
@@ -29,7 +30,7 @@ class Grammar(object):
 
 	int_ = pp.Regex(ur'[+-]?\d+').setParseAction(lambda t: int(t[0])).setName('integer')
 	float_ = pp.Regex(ur'[+-]?\d+\.\d*').setParseAction(lambda t: float(t[0])).setName('float')
-	number = (int_ | float_).setName('number')
+	number = (float_ | int_).setName('number')
 
 	string = (pp.QuotedString('"') | pp.QuotedString("'"))\
 		.setParseAction(pp.removeQuotes).setName('string')
@@ -40,7 +41,6 @@ class Grammar(object):
 
 	value = number | string | boolean
 
-	# UnboundLocalError: local variable 'symbols' referenced before assignment ;(
 	_one_of = lambda vals,**k: pp.oneOf(' '.join(vals), caseless=True, **k)
 
 	logic_not = _one_of(['not', '~', '!'])
@@ -48,6 +48,7 @@ class Grammar(object):
 	logic_or = _one_of(['or', '|', '||'])
 	logic_sets = _one_of(ops_sets)
 	logic_comparison = _one_of(ops_comparison)
+	logic_func = _one_of(ops_func)
 
 	math_mult, math_add = _one_of(ops_mult), _one_of(ops_add)
 
@@ -61,6 +62,7 @@ class Query(object):
 		self.g = g = self.grammar_cls()
 		atom = g.value | g.symbol.copy().setParseAction(lambda s,l,t: self.params[t[0].lower()])
 		self.syntax = pp.operatorPrecedence(atom, [
+			(g.logic_func, 1, pp.opAssoc.RIGHT, lambda s,l,t: g.ops_func[t[0][0]](t[0][1])),
 			(g.math_mult, 2, pp.opAssoc.LEFT, self.eval_math),
 			(g.math_add, 2, pp.opAssoc.LEFT, self.eval_math),
 			(g.logic_sets, 2, pp.opAssoc.LEFT, lambda s,l,t: g.ops_sets[t[0][1]](t[0][0], t[0][2])),
@@ -107,6 +109,7 @@ if __name__ == "__main__":
 		("199 / 2 > FRP", False),
 		("5 + 45 * 2 > FRP", False),
 		("-5+5 < FRP", True),
+		("99.9 < FRP", True),
 		("satellite is 'N'", False),
 		("FRP - 100 == 0", True),
 		("FRP = 1 and satellite = 'T'", False),
@@ -114,6 +117,11 @@ if __name__ == "__main__":
 		("1 is_not 1", False),
 		("'a' not_in letters", False),
 		("'c' in letters", True),
+		("letters ∈ letters", True),
+		("not(1 <> 2) is true", False),
+		("abs((2-6)/2) * 3", 6),
+		("not abs(2-3) is false", True),
+		("round(3.6)", 4),
 		("(1 <> 2) is true", True),
 		("(FRP = 1) and ( (satellite = 'T') or (satellite iS 'A' ))", False),
 	]
