@@ -57,8 +57,8 @@ class Query(object):
 
 	grammar_cls = Grammar
 
-	def __init__(self, **kws):
-		self.params = kws
+	def __init__(self, expr, **kws):
+		self.expr, self.params = expr, kws
 		self.g = g = self.grammar_cls()
 		atom = g.value | g.symbol.copy().setParseAction(lambda s,l,t: self.params[t[0].lower()])
 		self.syntax = pp.operatorPrecedence(atom, [
@@ -95,8 +95,11 @@ class Query(object):
 		else: res = True
 		return res
 
-	def eval(self, q):
-		return self.syntax.parseString(q, parseAll=True)[0]
+	def eval(self, **kws):
+		params_old = self.params.copy()
+		self.params.update(kws)
+		try: return self.syntax.parseString(self.expr, parseAll=True)[0]
+		finally: self.params = params_old
 
 
 if __name__ == "__main__":
