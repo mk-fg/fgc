@@ -1,4 +1,4 @@
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 import enum, struct, select, termios
 import os, sys, errno, ctypes, fcntl, time
 
@@ -46,7 +46,8 @@ class INotify:
 
 	_INotifyEv_struct = 'iIII'
 	_INotifyEv_struct_len = struct.calcsize(_INotifyEv_struct)
-	INotifyEv = namedtuple('INotifyEv', ['wd', 'mask', 'cookie', 'name'])
+	INotifyEv = namedtuple( 'INotifyEv',
+		['path', 'path_mask', 'wd', 'flags', 'cookie', 'name'] )
 
 	_lib = _libc = None
 	@classmethod
@@ -67,6 +68,7 @@ class INotify:
 
 	def __init__(self):
 		self._lib, self._fd = self._get_lib(), None
+		self.wd_paths = OrderedDict()
 
 	def open(self):
 		self._fd = self._call('inotify_init')
@@ -89,31 +91,57 @@ class INotify:
 	def __del__(self): self.close()
 
 	def add_watch(self, path, mask):
-		return self._call('inotify_add_watch', self._fd, path.encode(), mask)
+		wd = self._call('inotify_add_watch', self._fd, path.encode(), mask)
+		self.wd_paths[wd] = path, mask
+		return wd
+
 	def rm_watch(self, wd):
-		return self._call('inotify_rm_watch', self._fd, wd)
+		self._call('inotify_rm_watch', self._fd, wd)
+		self.wd_paths.pop(wd)
 
 	def poll(self, timeout=None):
 		return bool(self._poller.poll(timeout))
 
 	def read(self, poll=True, **poll_kws):
+		evs = list()
 		if poll:
-			if not self.poll(**poll_kws): return list()
+			if not self.poll(**poll_kws): return evs
 		bs = ctypes.c_int()
 		fcntl.ioctl(self._fd, termios.FIONREAD, bs)
+		if bs.value <= 0: return evs
 		buff = os.read(self._fd, bs.value)
-		n, bs, evs = 0, len(buff), list()
+		n, bs = 0, len(buff)
 		while n < bs:
-			wd, flags, cookie, name_len = struct.unpack_from(self._INotifyEv_struct, buff, n)
+			wd, mask, cookie, name_len = struct.unpack_from(self._INotifyEv_struct, buff, n)
 			n += self._INotifyEv_struct_len
 			name = ctypes.c_buffer(buff[n:n + name_len], name_len).value.decode()
 			n += name_len
-			flags = self.flags.unpack(flags)
-			evs.append(self.INotifyEv(wd, flags, cookie, name))
+			evs.append(self.INotifyEv(
+				*self.wd_paths[wd], wd, self.flags.unpack(mask), cookie, name ))
 		return evs
 
+	def __iter__(self):
+		while True:
+			for ev in self.read():
+				if (yield ev) is StopIteration: break
+			else: continue
+			break
+
 	@classmethod
-	def wait_for_event(cls, path, ev=None):
+	def ev_wait(cls, path, mask=None):
+		return next(cls.ev_iter(path, mask))
+
+	@classmethod
+	def ev_iter(cls, path, mask=None):
 		with cls() as ify:
-			ify.add_watch(path, ev or INotify.flags.all_events)
-			return ify.read()
+			if not isinstance(path, (tuple, list)): path = [path]
+			for p in path: ify.add_watch(p, mask or INotify.flags.all_events)
+			ev_iter, chk = iter(ify), None
+			while True:
+				try: chk = yield ev_iter.send(chk)
+				except StopIteration: break
+
+
+if __name__ == '__main__':
+	assert sys.argv[1:]
+	print(INotify.ev_wait(sys.argv[1:]))
